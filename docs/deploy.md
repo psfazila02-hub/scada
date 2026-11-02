@@ -25,7 +25,7 @@ A flow has two fields. One flow has one name. Several names are several flows.
 
 | Field | On `fan_in` | On `fan_out` |
 |---|---|---|
-| `from` | where this flow comes from: a server id, or a source such as `modbus://192.0.2.10:502` | this server, so the field is omitted |
+| `from` | where this flow comes from: a server id, or a device address such as `modbus://192.0.2.10:502`. A collector nickname is not a server | this server, so the field is omitted |
 | `name` | path of a characteristic of one namespace object. The last segment is the characteristic. The path without it is the object. The object path alone is an error. `*` matches any characters except `/` | the same path |
 | `to` | this server, so the field is omitted | the server that receives the flow |
 
