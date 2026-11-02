@@ -17,19 +17,31 @@ A server has four parts. Each part is optional.
 | `ownership` | state of an object this server edits. The same object on several servers is one fault-tolerant set. This is not telemetry |
 | `fan_in` | one flow into this server. It has no state |
 | `fan_out` | one flow out of this server |
-| `api` | services other servers may call. A panel that only the local HMI uses is not an api |
+| `api` | services other servers may call. `plant` is the plant HTTP API. `bus` is the message bus those servers open. A bus url carries no password. A panel that only the local HMI uses is not an api |
 
 Telemetry lives in `fan_in` and has no state. `ownership` is state this server edits. A server may omit any part.
 
-A flow has two fields. One flow has one name. Several names are several flows.
+A flow has two fields, plus `mapping` when a device publishes several parameters. One flow has one name. Several names are several flows.
 
 | Field | On `fan_in` | On `fan_out` |
 |---|---|---|
-| `from` | where this flow comes from: a server id, or a device address such as `modbus://192.0.2.10:502`. A collector nickname is not a server | this server, so the field is omitted |
-| `name` | path of a characteristic of one namespace object. The last segment is the characteristic. The path without it is the object. The object path alone is an error. `*` matches any characters except `/`. `{a,b}` lists alternatives for one segment. Brace groups in one path expand together. A fixed `from` applies to every expanded name | the same path |
+| `from` | a server id or one device address. A collector nickname is not a server. The address includes the line settings and the identity of that one device. A register window is `?at=1280&count=30`. A pattern in `name` is allowed only when every match is that same device | this server, so the field is omitted |
+| `mapping` | a point map, or the id of one in `mappings`. A key is a parameter id. The value is that parameter's point on the device: a register, an OPC UA node, or a column. Omitted for a server, and for a parameter that is the whole reading. An unknown id is an error. A key that is not under `name` is an error | omitted |
+| `name` | path of one parameter, or of a group that stands for every parameter under it. The object is the namespace node listed in `objects`. The object path alone is an error. `*` matches any remainder of the path, including `/`. A `fan_out` name keeps streams this server already has and does not add names from the rest of the namespace. `{a,b}` lists alternatives for one segment. Brace groups in one path expand together. A fixed `from` applies to every expanded name | the same path |
 | `to` | this server, so the field is omitted | the server that receives the flow |
 
-Flows differ. A register map, a device name, a place, and a list of fed machines are not fields of a flow. A plant keeps those notes outside the flow. `namespace` is the name tree. A name has an `id`. Nested names are `nodes`. `objects` lists the state this server holds. An entry is a path of ids from the root, joined by `/`. The same path on several servers is one fault-tolerant set. Title, kind, and place are not object fields. This document does not yet list the state fields themselves.
+Flows differ. A place and a list of fed machines are not fields of a flow. `from` is only the source. `mapping` is only the point map. Neither key shares its handler with the other. `mappings` holds a point map that several flows share. A flow names that id. The point map does not belong to the name tree. `namespace` is the name tree. A name has an `id`. Nested names are `nodes`. `templates` names a reusable node list. A namespace node with `template` takes that list as its children. Its own `nodes` patch that list. An id absent from the template is added. An id present in the template is removed when the patch sets `enabled: false`. A patch entry that stays may contain `nodes`, and those patch the children the same way. The same id twice in one patch is an error. A node that has children is a group. A flow may name the group instead of each leaf. The leaf is the parameter. The object may be an ancestor of that leaf. `objects` lists the state this server holds. An entry is a path of ids from the root, joined by `/`. The same path on several servers is one fault-tolerant set. Title, kind, and place are not object fields. This document does not yet list the state fields themselves.
+
+```yaml
+- id: unit-2
+  template: unit
+  nodes:
+    - id: rotation_on
+    - id: electrical
+      nodes:
+        - id: step
+          enabled: false
+```
 
 ```yaml
 namespace:
@@ -111,29 +123,26 @@ profiles:                        # shared by many servers
       state_store: { enabled: true }
       message_bus: { enabled: true }
       telemetry_store: { enabled: true }
+    apps:
+      scada:
+        image: example.invalid/plant:1
+        secret: scada-postgres
+      frontend:
+        image: example.invalid/frontend:1
+        url: https://mill.example
   cell-external:
-    command: ["node", "bin/edge-site.js"]
-    modules:
-      state_store: { enabled: false }
-      message_bus: { enabled: false }
-      telemetry_store: { enabled: false }
-apps:
-  scada:
-    image: example.invalid/plant:1   # required. Every scada release uses it unless the profile sets image
-    pullSecret: registry             # optional
-    secret: scada-postgres           # optional state-store Secret name. Default scada-postgres
-  wms:                               # any other key is an app this package does not interpret
-    chart: wms                       # required
-    clusters: [archive]              # required. Node cluster ids that receive the app
-    values:                          # required object, copied through
-      image: example.invalid/wms:1
+    extends: cell
+    apps:
+      frontend:
+        image: example.invalid/frontend:1
+        nodePort: 30080
 ```
 
 `mill/hall/unit-1` is three levels. Two names share a parent when their paths share a prefix. An empty segment is an error. A path that is not in `namespace` is an error.
 
 `objects` holds the namespace nodes whose state this server keeps. The chart copies a record through when a flow names its id. A collector is such a record. A flow's `from` may name that collector.
 
-`fan_in`, `fan_out`, and `api` name servers, sources, and one object id. They do not name databases. An unknown server id is an error. An object in `fan_out` or in a server-to-server `fan_in` must already be telemetry or ownership on that source server, or arrive there by another fan-in. Following `fan_out` for one object must not return to a server already visited. Several servers may list the same object in `ownership`; those servers are one fault-tolerant set for that editable state. One side of an edge is enough: `cell-b.fan_out` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object sets must match. `fan_in`, `fan_out`, and `objects` accept `*` and `{a,b}` in a name, a server id, or an object path. `*` matches any characters except `/`. `{a,b}` lists alternatives for one segment, and brace groups in one path expand together. A fixed `from` applies to every expanded name. A pattern selects paths and servers that already exist. It does not pair every matching server with every matching name. `from: edge-icht-*` with `name: tubes_plant/meltingShop/*/electrical` takes, from each matching server, the outgoing names that match the name. An object pattern expands to the namespace paths it fits. `fan_in.api` selects a service of the source when that source publishes one. It is required when the source provides more than one service. A source that publishes no api is not called. Its telemetry still arrives by `fan_out`.
+`fan_in`, `fan_out`, and `api` name servers, sources, and one object id. They do not name databases. An unknown server id is an error. An object in `fan_out` or in a server-to-server `fan_in` must already be telemetry or ownership on that source server, or arrive there by another fan-in. Following `fan_out` for one object must not return to a server already visited. Several servers may list the same object in `ownership`; those servers are one fault-tolerant set for that editable state. One side of an edge is enough: `cell-b.fan_out` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object sets must match. `fan_in`, `fan_out`, and `objects` accept `*` and `{a,b}` in a name, a server id, or an object path. `*` matches any remainder of the path, including `/`. A `fan_out` name keeps streams this server already has and does not add names from the rest of the namespace. `{a,b}` lists alternatives for one segment, and brace groups in one path expand together. A fixed `from` applies to every expanded name. A pattern selects paths and servers that already exist. It does not pair every matching server with every matching name. `from: edge-icht-*` with `name: tubes_plant/meltingShop/*/electrical` takes, from each matching server, the outgoing names that match the name. An object pattern expands to the namespace paths it fits. `fan_in.api` selects a service of the source when that source publishes one. It is required when the source provides more than one service. A source that publishes no api is not called. Its telemetry still arrives by `fan_out`.
 
 Profile:
 
@@ -146,18 +155,24 @@ Profile:
 | `command` | profile | argv of the site process |
 | `modules.*` | profile | `enabled: false` installs nothing. Unknown module name is an error |
 | `state_store` | module | durable records: timeline, alerts, segments. Enabled installs Postgres |
-| `message_bus` | module | alerts, segments, telemetry, operations, and decisions. Enabled installs RabbitMQ |
+| `message_bus` | module | alerts, segments, telemetry, operations, and decisions. Enabled installs RabbitMQ. The same broker serves MQTT |
 | `telemetry_store` | module | time-series measurements. Enabled installs ClickHouse |
+| `extends` | profile | parent profile. The child keeps the parent's modules, command, variables, and apps. A child app id adds or replaces that one app. A child command replaces the command |
+| `apps` | profile | processes this profile runs besides the modules |
+| `apps.*.image` | app | image of that process |
+| `apps.*.secret` | app | Secret name. The password is not a field of this document |
+| `apps.*.url` | app | published address, when the app has one name for the whole profile |
+| `apps.*.nodePort` | app | port on every server of this profile. The host is that server |
 
-A server that needs a different module set names another profile.
+The document does not choose how many processes run or how they are replicated. The driver does. `apps` are the applications the user adds. Tag catalogs, cycle phases, and reports are not fields of this document.
 
-`releases(document, cluster)` joins the selected server with its profile and returns that scada release plus the other apps whose `clusters` contain it. A `cluster` that matches no `profile.variables.cluster` is an error. Passwords are not fields of this document.
+`releases(document, cluster)` joins the selected server with its profile and returns that scada release plus the other apps of that profile. A `cluster` that matches no `profile.variables.cluster` is an error. Passwords are not fields of this document.
 
 Scada projection:
 
 | System document | Release values |
 |---|---|
-| `apps.scada.image`, or `profile.image` when set | `image` |
+| `profile.apps.scada.image` | `image` |
 | `profile.command` | `command` |
 | `profile.modules.state_store` | `postgres` |
 | `profile.modules.message_bus` | `rabbitmq` |
@@ -165,11 +180,11 @@ Scada projection:
 | `profile.env` | `env` |
 | `fan_in` whose `from` is not a server, joined with that server's `objects` | `machines` |
 | `fan_in` whose `from` is a server, plus `fan_out` edges aimed at this server | `sites` entries `{ baseUrl, machines }`. `baseUrl` is the selected source API. A source with no api is skipped |
-| `apps.scada.secret` | `postgres.secret` |
-| `apps.scada.pullSecret` | `pullSecret` |
+| `profile.apps.scada.secret` | `postgres.secret` |
+| `profile.apps.scada.pullSecret` | `pullSecret` |
 | `service` | `service` |
 
-`fan_out` is not repeated on the sender's release. The receiver's `sites` list is the edge. An app other than `scada` is emitted as `{ name, chart, values }` with `values` unchanged. It is not rendered by this chart.
+`fan_out` is not repeated on the sender's release. The receiver's `sites` list is the edge. `sites.baseUrl` is the source `plant` API. A `bus` API is the address a `fan_out` opens on another cluster. An app other than `scada` is emitted as `{ name, image, url, nodePort, schedule }` and is not rendered by this chart.
 
 ```bash
 helm upgrade --install cell-a charts/scada \
