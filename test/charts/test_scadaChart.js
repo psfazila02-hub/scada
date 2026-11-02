@@ -50,6 +50,51 @@ function envOf(rendered, name) {
     return decoded;
 }
 
+/**
+ * Reads the broker definitions embedded in a rendered manifest.
+ *
+ * @param {string} rendered - helm template output
+ * @returns {object} RabbitMQ definitions
+ */
+function broker(rendered) {
+    const marker = 'definitions.json: |';
+    const start = rendered.indexOf(marker);
+    const next = rendered.indexOf('\n---', start);
+    const body = rendered.slice(start + marker.length, next).split('\n').map((line) => {
+        return line.replace(/^ {4}/u, '');
+    }).join('\n').trim();
+    return JSON.parse(body);
+}
+
+/**
+ * Routing keys bound to one queue.
+ *
+ * @param {string} rendered - helm template output
+ * @param {string} queue - destination queue
+ * @returns {string[]} routing keys
+ */
+function routingKeys(rendered, queue) {
+    return broker(rendered).bindings.filter((item) => {
+        return item.destination === queue;
+    }).map((item) => {
+        return item.routing_key;
+    });
+}
+
+/**
+ * Collector Deployment names in a rendered manifest.
+ *
+ * @param {string} rendered - helm template output
+ * @returns {string[]} deployment names
+ */
+function collectorNames(rendered) {
+    return rendered.split('\n').filter((line) => {
+        return line.trim().startsWith('name:') && line.includes('-collector-');
+    }).map((line) => {
+        return line.trim().replace(/^name:\s*/u, '');
+    });
+}
+
 describe('scada chart', function() {
     this.timeout(30000);
 
@@ -234,6 +279,184 @@ describe('scada chart', function() {
         assert.ok(
             rendered.includes(bin),
             'the chart ignored the configured process command'
+        );
+    });
+
+    it('enables mqtt beside stomp', function() {
+        const rendered = render('image: example.invalid/scada:1\n');
+        assert.ok(
+            rendered.includes('[rabbitmq_stomp, rabbitmq_mqtt, rabbitmq_management].')
+                && rendered.includes('containerPort: 1883'),
+            'the broker did not publish mqtt beside stomp'
+        );
+    });
+
+    it('binds a namespace path instead of a device family', function() {
+        const head = `bay${Math.random().toString(36).slice(2, 6)}`;
+        const leaf = `volt${Math.random().toString(36).slice(2, 6)}`;
+        const rendered = render([
+            'image: example.invalid/scada:1',
+            'collectors:',
+            '  - command:',
+            '      - node',
+            '      - bin/read.js',
+            '    address: modbus://192.0.2.40:502',
+            `    path: ${head}/${leaf}`
+        ].join('\n'));
+        assert.deepStrictEqual(
+            routingKeys(rendered, 'scada.telemetry.ingest').sort(),
+            [`${head}.${leaf}`],
+            'the broker did not bind the namespace path'
+        );
+    });
+
+    it('binds a trailing star as everything below that path', function() {
+        const head = `zone${Math.random().toString(36).slice(2, 6)}`;
+        const rendered = render([
+            'image: example.invalid/scada:1',
+            'buses:',
+            '  - url: amqp://192.0.2.41:5672',
+            '    names:',
+            `      - ${head}/*`
+        ].join('\n'));
+        assert.deepStrictEqual(
+            routingKeys(rendered, 'scada.telemetry.outbox'),
+            [`${head}.#`],
+            'a trailing star did not bind everything below the path'
+        );
+    });
+
+    it('keeps a blanket telemetry binding when no path is named', function() {
+        const rendered = render('image: example.invalid/scada:1\n');
+        assert.deepStrictEqual(
+            routingKeys(rendered, 'scada.telemetry.ingest'),
+            ['#'],
+            'a site without paths lost the telemetry ingest binding'
+        );
+    });
+
+    it('does not install a remote shovel', function() {
+        const rendered = render([
+            'image: example.invalid/scada:1',
+            'bus:',
+            '  - url: amqp://192.0.2.42:5672',
+            '    names:',
+            '      - bay/out'
+        ].join('\n'));
+        assert.strictEqual(
+            rendered.includes('shovel') || rendered.includes('MX210'),
+            false,
+            'the chart installed a shovel or a device-family binding'
+        );
+    });
+
+    it('runs site and sink from the same image', function() {
+        const image = `example.invalid/site:${Math.random().toString(36).slice(2, 8)}`;
+        const rendered = render(`image: ${image}\n`);
+        assert.strictEqual(
+            rendered.includes('app: site-server')
+                && rendered.includes('app: supervisor-sink')
+                && rendered.split(`image: "${image}"`).length - 1,
+            2,
+            'site and sink did not share one image'
+        );
+    });
+
+    it('leaves stomp consumers on the sink', function() {
+        const rendered = render('image: example.invalid/scada:1\n');
+        assert.strictEqual(
+            envOf(rendered, 'SINK_PIPELINES'),
+            'false',
+            'the site still consumed the broker pipelines'
+        );
+    });
+
+    it('does not render profile apps', function() {
+        const rendered = render([
+            'image: example.invalid/scada:1',
+            'apps:',
+            '  - { name: frontend, image: example.invalid/hmi:1 }',
+            '  - { name: wms, image: example.invalid/wms:1 }',
+            '  - { name: supervisor, image: example.invalid/classifier:1 }'
+        ].join('\n'));
+        assert.strictEqual(
+            rendered.includes('example.invalid/hmi:1')
+                || rendered.includes('example.invalid/wms:1')
+                || rendered.includes('example.invalid/classifier:1'),
+            false,
+            'the chart rendered a profile app'
+        );
+    });
+
+    it('shares one collector across fan-in on the same serial device', function() {
+        const device = `/dev/ttyUSB${Math.floor(Math.random() * 8)}`;
+        const left = `bay/${Math.random().toString(36).slice(2, 6)}`;
+        const right = `bay/${Math.random().toString(36).slice(2, 6)}`;
+        const point = `holding:${Math.floor(Math.random() * 4000)}`;
+        const rendered = render([
+            'image: example.invalid/scada:1',
+            'collectors:',
+            '  - command:',
+            '      - node',
+            '      - bin/read.js',
+            `    address: "modbus://${device}?unit=1"`,
+            `    path: ${left}`,
+            '    mapping:',
+            `      voltage: "${point}"`,
+            '  - command:',
+            '      - node',
+            '      - bin/read.js',
+            `    address: "modbus://${device}?unit=2"`,
+            `    path: ${right}`
+        ].join('\n'));
+        assert.strictEqual(
+            collectorNames(rendered).length === 1
+                && rendered.includes(left)
+                && rendered.includes(right)
+                && rendered.includes(point)
+                && rendered.includes(device)
+                && rendered.includes('type: CharDevice'),
+            true,
+            'fan-in on one serial device did not share a collector'
+        );
+    });
+
+    it('keeps collectors apart when the serial devices differ', function() {
+        const left = `/dev/ttyS${Math.floor(Math.random() * 4)}`;
+        const right = `/dev/ttyS${4 + Math.floor(Math.random() * 4)}`;
+        const rendered = render([
+            'image: example.invalid/scada:1',
+            'collectors:',
+            '  - command: ["node", "bin/read.js"]',
+            `    address: "${left}"`,
+            '    path: bay/left',
+            '  - command: ["node", "bin/read.js"]',
+            `    address: "${right}"`,
+            '    path: bay/right'
+        ].join('\n'));
+        assert.strictEqual(
+            collectorNames(rendered).length,
+            2,
+            'different serial devices collapsed into one collector'
+        );
+    });
+
+    it('rejects two commands on one serial device', function() {
+        const device = `/dev/ttyUSB${Math.floor(Math.random() * 8)}`;
+        assert.throws(
+            () => {
+                return render([
+                    'image: example.invalid/scada:1',
+                    'collectors:',
+                    '  - command: ["node", "bin/one.js"]',
+                    `    address: "${device}?unit=1"`,
+                    '    path: bay/one',
+                    '  - command: ["node", "bin/two.js"]',
+                    `    address: "${device}?unit=2"`,
+                    '    path: bay/two'
+                ].join('\n'));
+            },
+            'the chart accepted two commands on one serial device'
         );
     });
 });

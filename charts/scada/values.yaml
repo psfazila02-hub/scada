@@ -4,6 +4,7 @@ command: []
 pullSecret: ""
 machines: []
 sites: []
+collectors: []
 env: []
 service:
   port: 3000
