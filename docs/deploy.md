@@ -30,7 +30,31 @@ A flow has two fields, plus `mapping` when a device publishes several parameters
 | `name` | path of one parameter, or of a group that stands for every parameter under it. The object is the namespace node listed in `objects`. The object path alone is an error. `*` matches any remainder of the path, including `/`. A `fan_out` name keeps streams this server already has and does not add names from the rest of the namespace. `{a,b}` lists alternatives for one segment. Brace groups in one path expand together. A fixed `from` applies to every expanded name | the same path |
 | `to` | this server, so the field is omitted | the server that receives the flow |
 
-Flows differ. A place and a list of fed machines are not fields of a flow. `from` is only the source. `mapping` is only the point map. Neither key shares its handler with the other. `mappings` holds a point map that several flows share. A flow names that id. The point map does not belong to the name tree. `namespace` is the name tree. A name has an `id`. Nested names are `nodes`. `templates` names a reusable node list. A namespace node with `template` takes that list as its children. Its own `nodes` patch that list. An id absent from the template is added. An id present in the template is removed when the patch sets `enabled: false`. A patch entry that stays may contain `nodes`, and those patch the children the same way. The same id twice in one patch is an error. A node that has children is a group. A flow may name the group instead of each leaf. The leaf is the parameter. The object may be an ancestor of that leaf. `objects` lists the state this server holds. An entry is a path of ids from the root, joined by `/`. The same path on several servers is one fault-tolerant set. Title, kind, and place are not object fields. This document does not yet list the state fields themselves.
+Flows differ. A place and a list of fed machines are not fields of a flow. `from` is only the address. `mapping` is only the point map. Neither key shares its handler with the other.
+
+### Templates
+
+`templates` names a reusable node list. The key is the name. The value is the list. A template is names only: an entry has an `id` and, when it is a group, `nodes`. It has no address and no point.
+
+A namespace node with `template` takes that list as its children. Its own `nodes` patch the list. A node with no `template` is not a patch: its `nodes` are the children. A template name that is missing is an error.
+
+| Patch | Effect |
+|---|---|
+| id the list does not have | added |
+| `enabled: false` on an id the list has | removed |
+| `enabled: false` on an id the list lacks | not added |
+| any other entry | stays; its `nodes`, if present, patch the children the same way |
+
+The same id twice in one patch is an error.
+
+```yaml
+templates:
+  unit:
+    - id: electrical
+      nodes:
+        - id: voltage
+        - id: step
+```
 
 ```yaml
 - id: unit-2
@@ -43,22 +67,56 @@ Flows differ. A place and a list of fed machines are not fields of a flow. `from
           enabled: false
 ```
 
+That patch adds `rotation_on`, keeps `voltage`, and removes `step`. A mapping key has to name a path that remains.
+
+### Mappings
+
+`mappings` is a catalog of point maps. A flow `mapping` is an inline map, or an id in that catalog. Several flows may share one id. The point map is not part of the name tree.
+
+A key is a parameter id under the flow `name`. The joined path is `name` + `/` + key, and that path must be in the namespace. The value is the point on that device: a register, an OPC UA node, or a column. Omit `mapping` on a server-to-server flow, and when the parameter is the whole reading. An unknown id is an error. A key that is not under `name` is an error.
+
 ```yaml
+mappings:
+  drive:
+    voltage: holding:40001
+    step: coil:1
+```
+
+```yaml
+- from: modbus://192.0.2.11:502
+  mapping: drive
+  name: mill/hall/unit-2/electrical
+```
+
+`voltage` is `mill/hall/unit-2/electrical/voltage`. The inline form is the same map in place of the id `drive`. The mill document below takes `unit` as-is and names `drive` on each device flow. Flows whose `from` is a server omit `mapping`.
+
+`namespace` is the name tree. A name has an `id`. Nested names are `nodes`. A node that has children is a group. A flow may name the group instead of each leaf. The leaf is the parameter. The object may be an ancestor of that leaf. `objects` lists the state this server holds. An entry is a path of ids from the root, joined by `/`. The same path on several servers is one fault-tolerant set. Title, kind, and place are not object fields. This document does not yet list the state fields themselves.
+
+```yaml
+templates:
+  unit:
+    - id: electrical
+      nodes:
+        - id: voltage
+        - id: step
+mappings:
+  drive:
+    voltage: holding:40001
+    step: coil:1
 namespace:
   - id: mill
     nodes:
       - id: hall
         nodes:
           - id: unit-1
-            nodes:
-              - id: electrical
+            template: unit
           - id: unit-2
-            nodes:
-              - id: electrical
+            template: unit
 servers:
   - id: cell-b
     fan_in:
       - from: modbus://192.0.2.11:502
+        mapping: drive
         name: mill/hall/unit-2/electrical
     fan_out:
       - to: cell-a
@@ -75,6 +133,7 @@ servers:
   - id: cell-a
     fan_in:
       - from: modbus://192.0.2.10:502
+        mapping: drive
         name: mill/hall/unit-1/electrical
       - from: cell-b
         api: plant
@@ -142,7 +201,7 @@ profiles:                        # shared by many servers
 
 `objects` holds the namespace nodes whose state this server keeps. The chart copies a record through when a flow names its id. A collector is such a record. A flow's `from` may name that collector.
 
-`fan_in`, `fan_out`, and `api` name servers, sources, and one object id. They do not name databases. An unknown server id is an error. An object in `fan_out` or in a server-to-server `fan_in` must already be telemetry or ownership on that source server, or arrive there by another fan-in. Following `fan_out` for one object must not return to a server already visited. Several servers may list the same object in `ownership`; those servers are one fault-tolerant set for that editable state. One side of an edge is enough: `cell-b.fan_out` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object sets must match. `fan_in`, `fan_out`, and `objects` accept `*` and `{a,b}` in a name, a server id, or an object path. `*` matches any remainder of the path, including `/`. A `fan_out` name keeps streams this server already has and does not add names from the rest of the namespace. `{a,b}` lists alternatives for one segment, and brace groups in one path expand together. A fixed `from` applies to every expanded name. A pattern selects paths and servers that already exist. It does not pair every matching server with every matching name. `from: edge-icht-*` with `name: tubes_plant/meltingShop/*/electrical` takes, from each matching server, the outgoing names that match the name. An object pattern expands to the namespace paths it fits. `fan_in.api` selects a service of the source when that source publishes one. It is required when the source provides more than one service. A source that publishes no api is not called. Its telemetry still arrives by `fan_out`.
+`fan_in`, `fan_out`, and `api` name servers, sources, and one object id. They do not name databases. An unknown server id is an error. An object in `fan_out` or in a server-to-server `fan_in` must already be telemetry or ownership on that source server, or arrive there by another fan-in. Following `fan_out` for one object must not return to a server already visited. Several servers may list the same object in `ownership`; those servers are one fault-tolerant set for that editable state. One side of an edge is enough: `cell-b.fan_out` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object sets must match. `fan_in`, `fan_out`, and `objects` accept `*` and `{a,b}` in a name, a server id, or an object path. `*` matches any remainder of the path, including `/`. A `fan_out` name keeps streams this server already has and does not add names from the rest of the namespace. `{a,b}` lists alternatives for one segment, and brace groups in one path expand together. A fixed `from` applies to every expanded name. A pattern selects paths and servers that already exist. It does not pair every matching server with every matching name. `from: cell-*` with `name: mill/hall/*/electrical` takes, from each matching server, the outgoing names that match the name. An object pattern expands to the namespace paths it fits. `fan_in.api` selects a service of the source when that source publishes one. It is required when the source provides more than one service. A source that publishes no api is not called. Its telemetry still arrives by `fan_out`.
 
 Profile:
 
