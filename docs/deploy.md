@@ -26,7 +26,7 @@ A flow has two fields. One flow has one name. Several names are several flows.
 | Field | On `fan_in` | On `upstream` |
 |---|---|---|
 | `from` | where this flow comes from: a server id, or a source such as `modbus://192.0.2.10:502` | this server, so the field is omitted |
-| `name` | what this flow is called | what this flow is called |
+| `name` | what this flow is called. A path in `namespace` names the stream, not the object that holds state | what this flow is called |
 | `to` | this server, so the field is omitted | the server that receives the flow |
 
 Flows differ. A register map, a device name, a place, and a list of fed machines are not fields of a flow. A plant keeps those notes outside the flow. `namespace` is the name tree. A name has an `id`. Nested names are `nodes`. `objects` lists the state this server holds. An entry is a path of ids from the root, joined by `/`. The same path on several servers is one fault-tolerant set. Title, kind, and place are not object fields. This document does not yet list the state fields themselves.
