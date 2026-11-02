@@ -6,7 +6,7 @@ The **system document** is one file for the whole plant: every machine, every no
 
 A **release** is one Helm install of `charts/scada` into one cluster. `releases(document, cluster)` cuts the system document down to the values of that cluster. One release never describes a second cluster.
 
-The chart does not know furnaces or HMI. Extra keys on a machine are opaque: they are copied through and the plant process reads them. A machine's place is a dot path, so the hierarchy is as deep as the path.
+The chart does not know furnaces or HMI. Extra keys on a machine are opaque: they are copied through and the plant process reads them.
 
 ## System document
 
@@ -29,9 +29,16 @@ A flow has two fields. One flow has one name. Several names are several flows.
 | `name` | what this flow is called | what this flow is called |
 | `to` | this node, so the field is omitted | the node that receives the flow |
 
-Flows differ. A register map, a device name, a place, and a list of fed machines are not fields of a flow. A plant keeps those notes outside the flow. `objects` lists the state this node is responsible for. An entry is the object's id. The same id on several nodes is one fault-tolerant set. Title, kind, and place are not object fields. This document does not yet list the state fields themselves.
+Flows differ. A register map, a device name, a place, and a list of fed machines are not fields of a flow. A plant keeps those notes outside the flow. `namespace` is the name tree. A name has an `id`. Nested names are `nodes`. `objects` lists the state this deployment node holds. An entry is a path of ids from the root, joined by `/`. The same path on several deployment nodes is one fault-tolerant set. Title, kind, and place are not object fields. This document does not yet list the state fields themselves.
 
 ```yaml
+namespace:
+  - id: mill
+    nodes:
+      - id: hall
+        nodes:
+          - id: unit-1
+          - id: unit-2
 nodes:
   - id: cell-b
     fan_in:
@@ -44,7 +51,7 @@ nodes:
       - id: plant
         url: http://192.0.2.11:30300/api/v1
     objects:
-      - unit-2
+      - mill/hall/unit-2
     profile:
       id: cell
       variables:
@@ -65,7 +72,7 @@ nodes:
       - id: plant
         url: http://192.0.2.10:30300/api/v1
     objects:
-      - unit-1
+      - mill/hall/unit-1
     profile:
       id: cell
       variables:
@@ -118,9 +125,9 @@ apps:
       image: example.invalid/wms:1
 ```
 
-`place` is a dot path on the object. `tubes.hall.bay-1` is three levels, and another object may use `tubes.hall` or `tubes.hall.bay-1.cell`. There is no separate place catalog. Two objects share a parent when their paths share a prefix. An empty segment is an error.
+`mill/hall/unit-1` is three levels. Two names share a parent when their paths share a prefix. An empty segment is an error. A path that is not in `namespace` is an error.
 
-There is no machine catalog beside the nodes. `objects` on a node holds the records the process reads. The chart copies a record through when a flow names its id. A collector is such a record. A flow's `from` may name that collector.
+`objects` holds the namespace nodes whose state this deployment node keeps. The chart copies a record through when a flow names its id. A collector is such a record. A flow's `from` may name that collector.
 
 `fan_in`, `upstream`, and `api` name nodes, sources, and one object id. They do not name databases. An unknown node id is an error. An object in `upstream` or in a node-to-node `fan_in` must already be telemetry or ownership on that source node, or arrive there by another fan-in. Following `upstream` for one object must not return to a node already visited. Several nodes may list the same object in `ownership`; those nodes are one fault-tolerant set for that editable state. One side of an edge is enough: `cell-b.upstream` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object sets must match. `fan_in.api` selects a service of the source when that source publishes one. It is required when the source provides more than one service. A source that publishes no api is not called. Its telemetry still arrives by `upstream`.
 
