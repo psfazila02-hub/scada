@@ -16,14 +16,14 @@ A server has four parts. Each part is optional.
 |---|---|
 | `ownership` | state of an object this server edits. The same object on several servers is one fault-tolerant set. This is not telemetry |
 | `fan_in` | one flow into this server. It has no state |
-| `upstream` | one flow out of this server |
+| `fan_out` | one flow out of this server |
 | `api` | services other servers may call. A panel that only the local HMI uses is not an api |
 
 Telemetry lives in `fan_in` and has no state. `ownership` is state this server edits. A server may omit any part.
 
 A flow has two fields. One flow has one name. Several names are several flows.
 
-| Field | On `fan_in` | On `upstream` |
+| Field | On `fan_in` | On `fan_out` |
 |---|---|---|
 | `from` | where this flow comes from: a server id, or a source such as `modbus://192.0.2.10:502` | this server, so the field is omitted |
 | `name` | path of a characteristic of one namespace object. The last segment is the characteristic. The path without it is the object. The object path alone is an error | the same path |
@@ -48,7 +48,7 @@ servers:
     fan_in:
       - from: modbus://192.0.2.11:502
         name: mill/hall/unit-2/electrical
-    upstream:
+    fan_out:
       - to: cell-a
         name: mill/hall/unit-2/electrical
     api:
@@ -67,7 +67,7 @@ servers:
       - from: cell-b
         api: plant
         name: mill/hall/unit-2/electrical
-    upstream:
+    fan_out:
       - to: archive
         name: mill/hall/unit-1/electrical
       - to: archive
@@ -133,7 +133,7 @@ apps:
 
 `objects` holds the namespace nodes whose state this server keeps. The chart copies a record through when a flow names its id. A collector is such a record. A flow's `from` may name that collector.
 
-`fan_in`, `upstream`, and `api` name servers, sources, and one object id. They do not name databases. An unknown server id is an error. An object in `upstream` or in a server-to-server `fan_in` must already be telemetry or ownership on that source server, or arrive there by another fan-in. Following `upstream` for one object must not return to a server already visited. Several servers may list the same object in `ownership`; those servers are one fault-tolerant set for that editable state. One side of an edge is enough: `cell-b.upstream` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object sets must match. `fan_in.api` selects a service of the source when that source publishes one. It is required when the source provides more than one service. A source that publishes no api is not called. Its telemetry still arrives by `upstream`.
+`fan_in`, `fan_out`, and `api` name servers, sources, and one object id. They do not name databases. An unknown server id is an error. An object in `fan_out` or in a server-to-server `fan_in` must already be telemetry or ownership on that source server, or arrive there by another fan-in. Following `fan_out` for one object must not return to a server already visited. Several servers may list the same object in `ownership`; those servers are one fault-tolerant set for that editable state. One side of an edge is enough: `cell-b.fan_out` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object sets must match. `fan_in.api` selects a service of the source when that source publishes one. It is required when the source provides more than one service. A source that publishes no api is not called. Its telemetry still arrives by `fan_out`.
 
 Profile:
 
@@ -164,12 +164,12 @@ Scada projection:
 | `profile.modules.telemetry_store` | `clickhouse` |
 | `profile.env` | `env` |
 | `fan_in` whose `from` is not a server, joined with that server's `objects` | `machines` |
-| `fan_in` whose `from` is a server, plus `upstream` edges aimed at this server | `sites` entries `{ baseUrl, machines }`. `baseUrl` is the selected source API. A source with no api is skipped |
+| `fan_in` whose `from` is a server, plus `fan_out` edges aimed at this server | `sites` entries `{ baseUrl, machines }`. `baseUrl` is the selected source API. A source with no api is skipped |
 | `apps.scada.secret` | `postgres.secret` |
 | `apps.scada.pullSecret` | `pullSecret` |
 | `service` | `service` |
 
-`upstream` is not repeated on the sender's release. The receiver's `sites` list is the edge. An app other than `scada` is emitted as `{ name, chart, values }` with `values` unchanged. It is not rendered by this chart.
+`fan_out` is not repeated on the sender's release. The receiver's `sites` list is the edge. An app other than `scada` is emitted as `{ name, chart, values }` with `values` unchanged. It is not rendered by this chart.
 
 ```bash
 helm upgrade --install cell-a charts/scada \
