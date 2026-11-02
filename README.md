@@ -134,7 +134,7 @@ Main entry (`import { … } from '@yarkivaev/scada'`):
 | `pgTimeline`, `pgAlerts`, `stateDataFromPool`, `stateDataFromMemory` | State ports |
 | `stompTimeline`, `stompAlerts`, `userDecisions` | STOMP messaging |
 | `machineOwners`, `ownerTimeline`, `httpTimeline`, `httpOperations` | Owner-routed timeline and operations write (local or edge HTTP) |
-| `mqttMetrics`, `modbusMqtt`, `activityTracking`, `amqpMetricsIngest` | Ingest pipelines |
+| `mqttMetrics`, `modbusMqtt`, `modbusPublish`, `activityTracking`, `amqpMetricsIngest` | Ingest pipelines |
 | `analyticsMcp`, `namespaceTree`, `coverageSpans`, `coverageOverlay`, `coverageCursor`, `sqlGuard` | Analytics MCP, path index, coverage spans, timeline-name overlay, checkpoint-or-sample cursor, read-only SQL guard |
 
 Subpath exports:
@@ -184,6 +184,7 @@ Alert and HMI copy are inject-only: pass `translations` into `siteServer` / `pla
 | Binary | Role |
 |--------|------|
 | `supervisor-sink` | STOMP → PostgreSQL ingest + edge HTTP API (`STATE_HTTP_PORT`, default 8081) |
+| `modbus-to-mqtt` | Poll Modbus and publish `STREAM` + `MAPPING` document paths (`src/bin/modbus-to-mqtt.js`) |
 
 Full plant API with site-specific routes: plant packages call `siteServer` from this package.
 
