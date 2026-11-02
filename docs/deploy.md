@@ -2,7 +2,7 @@
 
 Two levels.
 
-The **system document** is one file for the whole plant: every machine, every node, every app. A plant package stores that file and does not project it itself.
+The **system document** is one file for the whole plant: every machine, every server, every app. A plant package stores that file and does not project it itself.
 
 A **release** is one Helm install of `charts/scada` into one cluster. `releases(document, cluster)` cuts the system document down to the values of that cluster. One release never describes a second cluster.
 
@@ -10,26 +10,26 @@ The chart does not know furnaces or HMI. Extra keys on a machine are opaque: the
 
 ## System document
 
-A node has four parts. Each part is optional.
+A server has four parts. Each part is optional.
 
 | Part | What it answers |
 |---|---|
-| `ownership` | state of an object this node edits. The same object on several nodes is one fault-tolerant set. This is not telemetry |
-| `fan_in` | one flow into this node. It has no state |
-| `upstream` | one flow out of this node |
-| `api` | services other nodes may call. A panel that only the local HMI uses is not an api |
+| `ownership` | state of an object this server edits. The same object on several servers is one fault-tolerant set. This is not telemetry |
+| `fan_in` | one flow into this server. It has no state |
+| `upstream` | one flow out of this server |
+| `api` | services other servers may call. A panel that only the local HMI uses is not an api |
 
-Telemetry lives in `fan_in` and has no state. `ownership` is state this node edits. A node may omit any part.
+Telemetry lives in `fan_in` and has no state. `ownership` is state this server edits. A server may omit any part.
 
 A flow has two fields. One flow has one name. Several names are several flows.
 
 | Field | On `fan_in` | On `upstream` |
 |---|---|---|
-| `from` | where this flow comes from: a node id, or a source such as `modbus://192.0.2.10:502` | this node, so the field is omitted |
+| `from` | where this flow comes from: a server id, or a source such as `modbus://192.0.2.10:502` | this server, so the field is omitted |
 | `name` | what this flow is called | what this flow is called |
-| `to` | this node, so the field is omitted | the node that receives the flow |
+| `to` | this server, so the field is omitted | the server that receives the flow |
 
-Flows differ. A register map, a device name, a place, and a list of fed machines are not fields of a flow. A plant keeps those notes outside the flow. `namespace` is the name tree. A name has an `id`. Nested names are `nodes`. `objects` lists the state this deployment node holds. An entry is a path of ids from the root, joined by `/`. The same path on several deployment nodes is one fault-tolerant set. Title, kind, and place are not object fields. This document does not yet list the state fields themselves.
+Flows differ. A register map, a device name, a place, and a list of fed machines are not fields of a flow. A plant keeps those notes outside the flow. `namespace` is the name tree. A name has an `id`. Nested names are `nodes`. `objects` lists the state this server holds. An entry is a path of ids from the root, joined by `/`. The same path on several servers is one fault-tolerant set. Title, kind, and place are not object fields. This document does not yet list the state fields themselves.
 
 ```yaml
 namespace:
@@ -39,7 +39,7 @@ namespace:
         nodes:
           - id: unit-1
           - id: unit-2
-nodes:
+servers:
   - id: cell-b
     fan_in:
       - from: modbus://192.0.2.11:502
@@ -90,7 +90,7 @@ nodes:
       id: archive
       variables:
         cluster: archive
-profiles:                        # shared by many nodes
+profiles:                        # shared by many servers
   cell:
     variables:
       cluster: null
@@ -127,27 +127,27 @@ apps:
 
 `mill/hall/unit-1` is three levels. Two names share a parent when their paths share a prefix. An empty segment is an error. A path that is not in `namespace` is an error.
 
-`objects` holds the namespace nodes whose state this deployment node keeps. The chart copies a record through when a flow names its id. A collector is such a record. A flow's `from` may name that collector.
+`objects` holds the namespace nodes whose state this server keeps. The chart copies a record through when a flow names its id. A collector is such a record. A flow's `from` may name that collector.
 
-`fan_in`, `upstream`, and `api` name nodes, sources, and one object id. They do not name databases. An unknown node id is an error. An object in `upstream` or in a node-to-node `fan_in` must already be telemetry or ownership on that source node, or arrive there by another fan-in. Following `upstream` for one object must not return to a node already visited. Several nodes may list the same object in `ownership`; those nodes are one fault-tolerant set for that editable state. One side of an edge is enough: `cell-b.upstream` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object sets must match. `fan_in.api` selects a service of the source when that source publishes one. It is required when the source provides more than one service. A source that publishes no api is not called. Its telemetry still arrives by `upstream`.
+`fan_in`, `upstream`, and `api` name servers, sources, and one object id. They do not name databases. An unknown server id is an error. An object in `upstream` or in a server-to-server `fan_in` must already be telemetry or ownership on that source server, or arrive there by another fan-in. Following `upstream` for one object must not return to a server already visited. Several servers may list the same object in `ownership`; those servers are one fault-tolerant set for that editable state. One side of an edge is enough: `cell-b.upstream` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object sets must match. `fan_in.api` selects a service of the source when that source publishes one. It is required when the source provides more than one service. A source that publishes no api is not called. Its telemetry still arrives by `upstream`.
 
 Profile:
 
 | Field | Where | What it decides |
 |---|---|---|
-| `profile.id` | node | profile name. Unknown name is an error |
-| `variables` | profile | values a node may override. `cluster` selects the release. One Helm release, one cluster |
-| `profile.variables` | node | overrides of that profile |
-| `service` | node | how an API is published, for example `nodePort` |
+| `profile.id` | server | profile name. Unknown name is an error |
+| `variables` | profile | values a server may override. `cluster` selects the release. One Helm release, one cluster |
+| `profile.variables` | server | overrides of that profile |
+| `service` | server | how an API is published, for example `nodePort` |
 | `command` | profile | argv of the site process |
 | `modules.*` | profile | `enabled: false` installs nothing. Unknown module name is an error |
 | `state_store` | module | durable records: timeline, alerts, segments. Enabled installs Postgres |
 | `message_bus` | module | alerts, segments, telemetry, operations, and decisions. Enabled installs RabbitMQ |
 | `telemetry_store` | module | time-series measurements. Enabled installs ClickHouse |
 
-A node that needs a different module set names another profile.
+A server that needs a different module set names another profile.
 
-`releases(document, cluster)` joins the selected node with its profile and returns that scada release plus the other apps whose `clusters` contain it. A `cluster` that matches no `profile.variables.cluster` is an error. Passwords are not fields of this document.
+`releases(document, cluster)` joins the selected server with its profile and returns that scada release plus the other apps whose `clusters` contain it. A `cluster` that matches no `profile.variables.cluster` is an error. Passwords are not fields of this document.
 
 Scada projection:
 
@@ -159,8 +159,8 @@ Scada projection:
 | `profile.modules.message_bus` | `rabbitmq` |
 | `profile.modules.telemetry_store` | `clickhouse` |
 | `profile.env` | `env` |
-| `fan_in` whose `from` is not a node, joined with that node's `objects` | `machines` |
-| `fan_in` whose `from` is a node, plus `upstream` edges aimed at this node | `sites` entries `{ baseUrl, machines }`. `baseUrl` is the selected source API. A source with no api is skipped |
+| `fan_in` whose `from` is not a server, joined with that server's `objects` | `machines` |
+| `fan_in` whose `from` is a server, plus `upstream` edges aimed at this server | `sites` entries `{ baseUrl, machines }`. `baseUrl` is the selected source API. A source with no api is skipped |
 | `apps.scada.secret` | `postgres.secret` |
 | `apps.scada.pullSecret` | `pullSecret` |
 | `service` | `service` |
@@ -234,7 +234,7 @@ The chart's own RabbitMQ definitions create user `guest` / `guest` and point `ST
 
 ## What a profile installs
 
-The profile is implementation. It decides which modules exist. Local fan-in is the telemetry the release publishes as `machines`. Fan-in from another node becomes `sites`. Ownership is editable state and is not copied into `machines`.
+The profile is implementation. It decides which modules exist. Local fan-in is the telemetry the release publishes as `machines`. Fan-in from another server becomes `sites`. Ownership is editable state and is not copied into `machines`.
 
 Empty `machines` omits `EDGE_MACHINES`. Empty `sites` omits `EDGE_SITES`. A process that falls back to a baked-in plant profile then sees the whole plant. Set ownership and fan-in when the release must not use that fallback.
 
@@ -304,4 +304,4 @@ Prefer Secret references over literal URLs when the values file is stored in git
 
 This chart does not create the Kubernetes cluster, choose how many nodes it has, or install ingress, storage class, or a remote shovel. Another app is a key under `apps` with its own `chart` and `values`. `releases` hands those values through. This chart does not render them.
 
-The running site process still selects one migration set with `SINK_DB_PROFILE`. This document can describe a node that both sends and receives, and `releases` emits both `machines` and `sites` for it. The process does not yet apply two migration sets on that node. Several nodes may own one object. The process does not yet choose which member of that set serves a request.
+The running site process still selects one migration set with `SINK_DB_PROFILE`. This document can describe a server that both sends and receives, and `releases` emits both `machines` and `sites` for it. The process does not yet apply two migration sets on that server. Several servers may own one object. The process does not yet choose which member of that set serves a request.
