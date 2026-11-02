@@ -45,11 +45,10 @@ nodes:
         url: http://192.0.2.11:30300/api/v1
     objects:
       - unit-2
-    implementation:
-      profile:
-        id: cell
-        variables:
-          cluster: cell-b
+    profile:
+      id: cell
+      variables:
+        cluster: cell-b
   - id: cell-a
     fan_in:
       - from: modbus://192.0.2.10:502
@@ -67,12 +66,11 @@ nodes:
         url: http://192.0.2.10:30300/api/v1
     objects:
       - unit-1
-    implementation:
-      profile:
-        id: cell
-        variables:
-          cluster: cell-a
-      service: { nodePort: 30300 }
+    profile:
+      id: cell
+      variables:
+        cluster: cell-a
+    service: { nodePort: 30300 }
   - id: archive
     fan_in:
       - from: cell-a
@@ -81,12 +79,11 @@ nodes:
       - from: cell-a
         api: plant
         name: unit-2
-    implementation:
-      profile:
-        id: archive
-        variables:
-          cluster: archive
-profiles:                        # implementation shared by many nodes
+    profile:
+      id: archive
+      variables:
+        cluster: archive
+profiles:                        # shared by many nodes
   cell:
     variables:
       cluster: null
@@ -127,14 +124,14 @@ There is no machine catalog beside the nodes. `objects` on a node holds the reco
 
 `fan_in`, `upstream`, and `api` name nodes, sources, and one object id. They do not name databases. An unknown node id is an error. An object in `upstream` or in a node-to-node `fan_in` must already be telemetry or ownership on that source node, or arrive there by another fan-in. Following `upstream` for one object must not return to a node already visited. Several nodes may list the same object in `ownership`; those nodes are one fault-tolerant set for that editable state. One side of an edge is enough: `cell-b.upstream` to `cell-a` and `cell-a.fan_in` from `cell-b` are the same edge. When both sides are present, the object sets must match. `fan_in.api` selects a service of the source when that source publishes one. It is required when the source provides more than one service. A source that publishes no api is not called. Its telemetry still arrives by `upstream`.
 
-Implementation:
+Profile:
 
 | Field | Where | What it decides |
 |---|---|---|
-| `implementation.profile.id` | node | profile name. Unknown name is an error |
+| `profile.id` | node | profile name. Unknown name is an error |
 | `variables` | profile | values a node may override. `cluster` selects the release. One Helm release, one cluster |
-| `implementation.profile.variables` | node | overrides of that profile |
-| `implementation.service` | node | how an API is published, for example `nodePort` |
+| `profile.variables` | node | overrides of that profile |
+| `service` | node | how an API is published, for example `nodePort` |
 | `command` | profile | argv of the site process |
 | `modules.*` | profile | `enabled: false` installs nothing. Unknown module name is an error |
 | `state_store` | module | durable records: timeline, alerts, segments. Enabled installs Postgres |
@@ -159,7 +156,7 @@ Scada projection:
 | `fan_in` whose `from` is a node, plus `upstream` edges aimed at this node | `sites` entries `{ baseUrl, machines }`. `baseUrl` is the selected source API. A source with no api is skipped |
 | `apps.scada.secret` | `postgres.secret` |
 | `apps.scada.pullSecret` | `pullSecret` |
-| `implementation.service` | `service` |
+| `service` | `service` |
 
 `upstream` is not repeated on the sender's release. The receiver's `sites` list is the edge. An app other than `scada` is emitted as `{ name, chart, values }` with `values` unchanged. It is not rendered by this chart.
 
