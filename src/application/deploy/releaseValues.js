@@ -1,5 +1,5 @@
-import { nodeById } from './releaseNodes.js';
-import { serviceUrl } from './releaseEdges.js';
+import { isAddress } from './expandPattern.js';
+import { clusterOf, objectPath, serverById } from './releaseNodes.js';
 
 /**
  * Maps one module name onto a chart product.
@@ -25,9 +25,9 @@ function bindOne(name, spec, secret) {
 }
 
 /**
- * Maps enabled modules onto chart product keys.
+ * Maps modules onto chart product keys.
  *
- * @param {object} profile - node profile
+ * @param {object} profile - server profile
  * @param {string|undefined} secret - state-store Secret name
  * @returns {object} postgres, rabbitmq, and clickhouse fragments
  * @example
@@ -43,75 +43,157 @@ export function bindModules(profile, secret) {
 }
 
 /**
- * Routes aimed at one node.
+ * Opaque fields of an object record.
  *
- * @param {object} document - system document
- * @param {object[]} edges - directed edges
- * @param {object} node - receiver
- * @returns {object[]} EDGE_SITES entries
+ * @param {object} server - selected server
+ * @param {string} path - object path
+ * @returns {object} extra fields
  * @example
- *   routesFor(document, edges, node);
+ *   recordFor({ objects: ['mill/unit'] }, 'mill/unit');
  */
-export function routesFor(document, edges, node) {
-    const routes = [];
-    edges.filter((edge) => {return edge.to === node.id}).forEach((edge) => {
-        const source = nodeById(document, edge.from);
-        if (!edge.api && (source.api || []).length === 0) {
+function recordFor(server, path) {
+    const found = (server.objects || []).find((entry) => {
+        return typeof entry === 'object' && entry !== null && (entry.id === path || entry.path === path);
+    });
+    return found || {};
+}
+
+/**
+ * Local fan-in joined with the server's objects.
+ *
+ * @param {object} server - selected server
+ * @returns {object[]} machine records
+ * @example
+ *   machinesOf({ fan_in: [], id: 'cell' });
+ */
+export function machinesOf(server) {
+    const rows = [];
+    (server.fan_in || []).forEach((flow) => {
+        if (!isAddress(flow.from)) {
             return;
         }
-        routes.push({
-            baseUrl: serviceUrl(source, edge.api),
-            machines: edge.objects.slice()
+        const path = objectPath(server, flow.name);
+        const row = {
+            from: flow.from,
+            id: path.split('/').at(-1),
+            name: flow.name
+        };
+        if (flow.mapping) {
+            row.mapping = flow.mapping;
+        }
+        const extra = recordFor(server, path);
+        Object.keys(extra).forEach((key) => {
+            if (key !== 'id' && key !== 'path') {
+                row[key] = extra[key];
+            }
         });
+        rows.push(row);
+    });
+    return rows;
+}
+
+/**
+ * Plant API URL of a source, when that source publishes one.
+ *
+ * @param {object} source - source server
+ * @param {string|undefined} api - service the edge names
+ * @returns {string} plant URL, or empty when the source publishes none
+ * @example
+ *   plantUrl({ api: [{ id: 'plant', url: 'http://192.0.2.10/api/v1' }], id: 'cell' });
+ */
+function plantUrl(source, api) {
+    const listed = source.api || [];
+    if (api && !listed.some((item) => {
+        return item.id === api;
+    })) {
+        throw new Error(`system document server ${source.id} provides no api ${api}`);
+    }
+    if (!api && listed.length > 1) {
+        throw new Error(`system document server ${source.id} must name one api`);
+    }
+    const plant = listed.find((item) => {
+        return item.id === 'plant';
+    });
+    return plant ? plant.url : '';
+}
+
+/**
+ * Sites for edges aimed at one server.
+ *
+ * `baseUrl` is the source plant API. A source with no plant API is skipped.
+ *
+ * @param {object} document - expanded document
+ * @param {object[]} edges - directed edges
+ * @param {object} server - receiver
+ * @returns {object[]} site entries
+ * @example
+ *   routesFor({ servers: [] }, [], { id: 'archive' });
+ */
+export function routesFor(document, edges, server) {
+    const routes = [];
+    edges.filter((edge) => {
+        return edge.to === server.id;
+    }).forEach((edge) => {
+        const source = serverById(document, edge.from);
+        const url = plantUrl(source, edge.api);
+        if (url.length === 0) {
+            return;
+        }
+        const machines = [];
+        edge.objects.forEach((path) => {
+            const id = path.split('/').at(-1);
+            if (!machines.includes(id)) {
+                machines.push(id);
+            }
+        });
+        routes.push({ baseUrl: url, machines });
     });
     return routes;
 }
 
 /**
- * Telemetry this node receives from a source that is not a node.
+ * Bus addresses a fan-out opens on another cluster.
  *
- * @param {object} document - system document
- * @param {object} node - selected node
- * @returns {object[]} device records named by those flows
+ * @param {object} document - expanded document
+ * @param {object} server - sender
+ * @returns {{cluster: string, url: string}[]} bus addresses
  * @example
- *   telemetryOf(document, node);
+ *   busesFor({ profiles: {}, servers: [] }, { fan_out: [], profile: { id: 'cell' } });
  */
-export function telemetryOf(document, node) {
-    const ids = new Set((document.nodes || []).map((item) => {return item.id}));
-    const catalog = node.objects || [];
-    return (node.fan_in || []).filter((entry) => {
-        return entry && entry.from && !ids.has(entry.from);
-    }).map((flow) => {
-        const found = catalog.find((item) => {
-            const id = typeof item === 'string' ? item : item.id;
-            return id === flow.name;
-        });
-        if (!found) {
-            return flow;
+export function busesFor(document, server) {
+    const mine = clusterOf(document, server);
+    const rows = [];
+    const seen = new Set();
+    (server.fan_out || []).forEach((flow) => {
+        const dest = serverById(document, flow.to);
+        const other = clusterOf(document, dest);
+        if (other === mine || seen.has(other)) {
+            return;
         }
-        const row = typeof found === 'string' ? { id: found } : found;
-        return { ...row, ...flow, id: row.id };
+        seen.add(other);
+        const bus = (dest.api || []).find((item) => {
+            return item.id === 'bus';
+        });
+        if (!bus) {
+            throw new Error(`system document server ${dest.id} provides no api bus`);
+        }
+        rows.push({ cluster: other, url: bus.url });
     });
+    return rows;
 }
 
 /**
- * Apps other than scada whose clusters include this release.
+ * Apps of a profile other than scada.
  *
- * @param {object} document - system document
- * @param {string} cluster - release selector
+ * @param {object} profile - resolved profile
  * @returns {object[]} pass-through apps
  * @example
- *   passedApps(document, 'archive');
+ *   passedApps({ apps: { frontend: { image: 'example.invalid/hmi:1' } } });
  */
-export function passedApps(document, cluster) {
-    return Object.keys(document.apps || {}).filter((name) => {return name !== 'scada'}).filter((name) => {
-        const app = document.apps[name];
-        return (app.clusters || []).includes(cluster);
+export function passedApps(profile) {
+    return Object.keys(profile.apps || {}).filter((name) => {
+        return name !== 'scada';
     }).map((name) => {
-        const app = document.apps[name];
-        if (!app.chart) {
-            throw new Error(`system document app ${name} has no chart`);
-        }
-        return { chart: app.chart, name, values: app.values };
+        return { ...profile.apps[name], name };
     });
 }

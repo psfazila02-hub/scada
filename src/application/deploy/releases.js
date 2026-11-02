@@ -1,97 +1,115 @@
-import { nodeFor, profileFor } from './releaseNodes.js';
+import expand from './expand.js';
 import { assertHeld, edgesOf } from './releaseEdges.js';
-import { bindModules, passedApps, routesFor, telemetryOf } from './releaseValues.js';
+import { profileFor, serverFor } from './releaseNodes.js';
+import { bindModules, busesFor, machinesOf, passedApps, routesFor } from './releaseValues.js';
+import frozen from './frozen.js';
+
+/**
+ * Starts release values from the scada app and the profile modules.
+ *
+ * @param {object} profile - resolved profile
+ * @returns {object} image and module values
+ * @example
+ *   withImage({ apps: { scada: { image: 'example.invalid/plant:1' } }, modules: {} });
+ */
+function withImage(profile) {
+    const app = profile.apps && profile.apps.scada;
+    const image = app && app.image;
+    if (!image) {
+        throw new Error('system document has no scada image');
+    }
+    return { image, ...bindModules(profile, app.secret) };
+}
 
 /**
  * Copies process fields the chart reads beside the image.
  *
  * @param {object} values - release values
- * @param {object} profile - implementation profile
- * @param {object} node - selected node
- * @param {object|undefined} app - scada app entry
- * @returns {object} the same values
+ * @param {object} profile - resolved profile
+ * @param {object} server - selected server
+ * @returns {object} values with command, service, env, and pull secret
  * @example
- *   withProcess(values, profile, node, app);
+ *   withProcess({ image: 'example.invalid/plant:1' }, { apps: { scada: {} } }, {});
  */
-function withProcess(values, profile, node, app) {
+function withProcess(values, profile, server) {
+    const app = profile.apps && profile.apps.scada;
+    const copy = { ...values };
     if (profile.command) {
-        values.command = profile.command;
+        copy.command = profile.command;
     }
     if (app && app.pullSecret) {
-        values.pullSecret = app.pullSecret;
+        copy.pullSecret = app.pullSecret;
     }
-    if (node.implementation.service) {
-        values.service = node.implementation.service;
+    if (server.service) {
+        copy.service = server.service;
     }
     if (profile.env) {
-        values.env = profile.env;
+        copy.env = profile.env;
     }
-    return values;
+    return copy;
 }
 
 /**
- * Copies telemetry and routes when the node has any.
+ * Copies machines, sites, and bus addresses when the server has any.
  *
  * @param {object} values - release values
- * @param {object[]} telemetry - fan-in records
- * @param {object[]} routes - routes to source nodes
- * @returns {object} the same values
+ * @param {object[]} owned - local fan-in records
+ * @param {object[]} routes - incoming sites
+ * @param {object[]} buses - fan-out bus addresses
+ * @returns {object} values with those lists
  * @example
- *   withObjects(values, owned, routes);
+ *   withFlows({ image: 'example.invalid/plant:1' }, [], [], []);
  */
-function withObjects(values, owned, routes) {
+function withFlows(values, owned, routes, buses) {
+    const copy = { ...values };
     if (owned.length > 0) {
-        values.machines = owned;
+        copy.machines = owned;
     }
     if (routes.length > 0) {
-        values.sites = routes;
+        copy.sites = routes;
     }
-    return values;
+    if (buses.length > 0) {
+        copy.bus = buses;
+    }
+    return copy;
 }
 
 /**
- * Chart values for one node.
+ * Chart values for one server.
  *
- * @param {object} document - system document
- * @param {object} node - selected node
- * @param {object} profile - implementation profile
+ * @param {object} document - expanded document
+ * @param {object} server - selected server
+ * @param {object} profile - resolved profile
  * @param {object[]} edges - directed edges
  * @returns {object} scada release values
  * @example
- *   scadaRelease(document, node, profile, []);
+ *   scadaRelease({ servers: [] }, { fan_in: [], fan_out: [], id: 'cell' }, { apps: { scada: { image: 'example.invalid/plant:1' } } }, []);
  */
-function scadaRelease(document, node, profile, edges) {
-    const app = document.apps && document.apps.scada;
-    const image = profile.image || (app && app.image);
-    if (!image) {
-        throw new Error('system document has no scada image');
-    }
-    const values = withProcess(
-        { image, ...bindModules(profile, app && app.secret) },
-        profile,
-        node,
-        app
-    );
-    return withObjects(values, telemetryOf(document, node), routesFor(document, edges, node));
+function scadaRelease(document, server, profile, edges) {
+    const buses = busesFor(document, server);
+    const owned = machinesOf(server);
+    const routes = routesFor(document, edges, server);
+    const values = withImage(profile);
+    return withFlows(withProcess(values, profile, server), owned, routes, buses);
 }
 
 /**
  * Cuts one cluster out of a system document.
  *
- * @example
- *   releases(document, 'archive').scada.image;
- *
  * @param {object} document - system document
  * @param {string} cluster - release selector
- * @returns {{scada: object, apps: object[]}} scada values and pass-through apps
+ * @returns {{apps: object[], scada: object}} scada values and the profile's other apps
+ * @example
+ *   releases({ profiles: {}, servers: [] }, 'missing');
  */
 export default function releases(document, cluster) {
-    const node = nodeFor(document, cluster);
-    const profile = profileFor(document, node);
-    const edges = edgesOf(document);
-    assertHeld(document, edges);
-    return {
-        apps: passedApps(document, cluster),
-        scada: scadaRelease(document, node, profile, edges)
-    };
+    const expanded = expand(document);
+    const host = serverFor(expanded, cluster);
+    const links = edgesOf(expanded);
+    const profile = profileFor(expanded, host);
+    assertHeld(expanded, links);
+    return frozen({
+        apps: passedApps(profile),
+        scada: scadaRelease(expanded, host, profile, links)
+    });
 }
