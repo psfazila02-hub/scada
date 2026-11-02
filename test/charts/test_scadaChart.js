@@ -459,4 +459,22 @@ describe('scada chart', function() {
             'the chart accepted two commands on one serial device'
         );
     });
+
+    it('passes document paths in STREAM and leaves the process PATH', function() {
+        const stem = `bay/ünit-${Math.random().toString(36).slice(2, 6)}`;
+        const rendered = render([
+            'image: example.invalid/scada:1',
+            'collectors:',
+            '  - command:',
+            '      - node',
+            '      - bin/read.js',
+            '    address: modbus://192.0.2.40:502',
+            `    path: ${stem}`
+        ].join('\n'));
+        assert.deepStrictEqual(
+            [envOf(rendered, 'PATH'), envOf(rendered, 'STREAM')],
+            ['', [stem]],
+            'the collector replaced the process PATH with document paths'
+        );
+    });
 });

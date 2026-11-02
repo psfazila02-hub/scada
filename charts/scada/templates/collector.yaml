@@ -79,7 +79,7 @@ spec:
           env:
             - name: ADDRESS
               value: {{ $addresses | toJson | quote }}
-            - name: PATH
+            - name: STREAM
               value: {{ $paths | toJson | quote }}
             - name: MAPPING
               value: {{ $maps | toJson | quote }}
