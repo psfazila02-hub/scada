@@ -26,7 +26,7 @@ A flow has two fields. One flow has one name. Several names are several flows.
 | Field | On `fan_in` | On `upstream` |
 |---|---|---|
 | `from` | where this flow comes from: a server id, or a source such as `modbus://192.0.2.10:502` | this server, so the field is omitted |
-| `name` | what this flow is called. A path in `namespace` names the stream, not the object that holds state | what this flow is called |
+| `name` | path of a characteristic of one namespace object. The last segment is the characteristic. The path without it is the object. The object path alone is an error | the same path |
 | `to` | this server, so the field is omitted | the server that receives the flow |
 
 Flows differ. A register map, a device name, a place, and a list of fed machines are not fields of a flow. A plant keeps those notes outside the flow. `namespace` is the name tree. A name has an `id`. Nested names are `nodes`. `objects` lists the state this server holds. An entry is a path of ids from the root, joined by `/`. The same path on several servers is one fault-tolerant set. Title, kind, and place are not object fields. This document does not yet list the state fields themselves.
@@ -38,15 +38,19 @@ namespace:
       - id: hall
         nodes:
           - id: unit-1
+            nodes:
+              - id: electrical
           - id: unit-2
+            nodes:
+              - id: electrical
 servers:
   - id: cell-b
     fan_in:
       - from: modbus://192.0.2.11:502
-        name: unit-2
+        name: mill/hall/unit-2/electrical
     upstream:
       - to: cell-a
-        name: unit-2
+        name: mill/hall/unit-2/electrical
     api:
       - id: plant
         url: http://192.0.2.11:30300/api/v1
@@ -59,15 +63,15 @@ servers:
   - id: cell-a
     fan_in:
       - from: modbus://192.0.2.10:502
-        name: unit-1
+        name: mill/hall/unit-1/electrical
       - from: cell-b
         api: plant
-        name: unit-2
+        name: mill/hall/unit-2/electrical
     upstream:
       - to: archive
-        name: unit-1
+        name: mill/hall/unit-1/electrical
       - to: archive
-        name: unit-2
+        name: mill/hall/unit-2/electrical
     api:
       - id: plant
         url: http://192.0.2.10:30300/api/v1
@@ -82,10 +86,10 @@ servers:
     fan_in:
       - from: cell-a
         api: plant
-        name: unit-1
+        name: mill/hall/unit-1/electrical
       - from: cell-a
         api: plant
-        name: unit-2
+        name: mill/hall/unit-2/electrical
     profile:
       id: archive
       variables:
