@@ -62,14 +62,13 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: collector
-      app.kubernetes.io/instance: {{ $.Release.Name }}
+      {{- include "scada.match" (dict "app" "collector" "ctx" $) | nindent 6 }}
       scada/command: {{ $slug }}
   template:
     metadata:
       labels:
         {{- include "scada.labels" $ | nindent 8 }}
-        app: collector
+        {{- include "scada.match" (dict "app" "collector" "ctx" $) | nindent 8 }}
         scada/command: {{ $slug }}
     spec:
       {{- with $.Values.pullSecret }}

@@ -10,13 +10,12 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: site-server
-      app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- include "scada.match" (dict "app" "site-server" "ctx" .) | nindent 6 }}
   template:
     metadata:
       labels:
         {{- include "scada.labels" . | nindent 8 }}
-        app: site-server
+        {{- include "scada.match" (dict "app" "site-server" "ctx" .) | nindent 8 }}
     spec:
       {{- with .Values.pullSecret }}
       imagePullSecrets:
@@ -85,8 +84,7 @@ spec:
       port: {{ .Values.service.internalPort }}
       targetPort: internal-api
   selector:
-    app: site-server
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- include "scada.match" (dict "app" "site-server" "ctx" .) | nindent 4 }}
 {{- if gt (int .Values.service.nodePort) 0 }}
 ---
 apiVersion: v1
@@ -105,6 +103,5 @@ spec:
       targetPort: http
       nodePort: {{ .Values.service.nodePort }}
   selector:
-    app: site-server
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- include "scada.match" (dict "app" "site-server" "ctx" .) | nindent 4 }}
 {{- end }}

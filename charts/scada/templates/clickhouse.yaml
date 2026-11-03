@@ -12,9 +12,14 @@ spec:
     - name: http
       port: 8123
       targetPort: http
+    - name: native
+      port: 9000
+      targetPort: native
+    - name: metrics
+      port: 9363
+      targetPort: metrics
   selector:
-    app: clickhouse
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- include "scada.match" (dict "app" "clickhouse" "ctx" .) | nindent 4 }}
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -29,13 +34,12 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: clickhouse
-      app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- include "scada.match" (dict "app" "clickhouse" "ctx" .) | nindent 6 }}
   template:
     metadata:
       labels:
         {{- include "scada.labels" . | nindent 8 }}
-        app: clickhouse
+        {{- include "scada.match" (dict "app" "clickhouse" "ctx" .) | nindent 8 }}
     spec:
       containers:
         - name: clickhouse
@@ -43,6 +47,10 @@ spec:
           ports:
             - name: http
               containerPort: 8123
+            - name: native
+              containerPort: 9000
+            - name: metrics
+              containerPort: 9363
           volumeMounts:
             - name: data
               mountPath: /var/lib/clickhouse
@@ -50,8 +58,5 @@ spec:
     - metadata:
         name: data
       spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 20Gi
+        {{- include "scada.claim" (dict "size" .Values.clickhouse.storage "class" .Values.clickhouse.storageClass) | nindent 8 }}
 {{- end }}

@@ -13,8 +13,7 @@ spec:
       port: 5432
       targetPort: postgres
   selector:
-    app: postgres
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- include "scada.match" (dict "app" "postgres" "ctx" .) | nindent 4 }}
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -29,13 +28,12 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: postgres
-      app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- include "scada.match" (dict "app" "postgres" "ctx" .) | nindent 6 }}
   template:
     metadata:
       labels:
         {{- include "scada.labels" . | nindent 8 }}
-        app: postgres
+        {{- include "scada.match" (dict "app" "postgres" "ctx" .) | nindent 8 }}
     spec:
       containers:
         - name: postgres
@@ -56,6 +54,8 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.postgres.secret }}
                   key: password
+            - name: PGDATA
+              value: {{ .Values.postgres.data | quote }}
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
@@ -63,8 +63,5 @@ spec:
     - metadata:
         name: data
       spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 10Gi
+        {{- include "scada.claim" (dict "size" .Values.postgres.storage "class" .Values.postgres.storageClass) | nindent 8 }}
 {{- end }}

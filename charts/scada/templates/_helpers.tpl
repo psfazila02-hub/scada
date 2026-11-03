@@ -2,6 +2,31 @@
 app.kubernetes.io/name: scada
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- include "scada.extraLabels" . }}
+{{- end }}
+
+{{- define "scada.extraLabels" -}}
+{{- range $key, $val := (.Values.extraLabels | default dict) }}
+{{ $key }}: {{ $val | quote }}
+{{- end }}
+{{- end }}
+
+{{- define "scada.match" -}}
+app: {{ .app }}
+{{- range $key, $val := (.ctx.Values.extraLabels | default dict) }}
+{{ $key }}: {{ $val | quote }}
+{{- end }}
+{{- end }}
+
+{{- define "scada.claim" -}}
+accessModes: ["ReadWriteOnce"]
+{{- if .class }}
+storageClassName: {{ .class | quote }}
+{{- end }}
+resources:
+  requests:
+    storage: {{ .size | quote }}
+volumeMode: Filesystem
 {{- end }}
 
 {{- define "scada.device" -}}

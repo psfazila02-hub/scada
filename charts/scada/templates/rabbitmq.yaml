@@ -85,19 +85,38 @@ metadata:
     {{- include "scada.labels" . | nindent 4 }}
     app: rabbitmq
 spec:
+  {{- $svc := .Values.rabbitmq.service | default dict }}
+  type: {{ $svc.type | default "ClusterIP" }}
   ports:
     - name: amqp
       port: 5672
       targetPort: amqp
+      {{- with $svc.nodePorts }}
+      {{- if .amqp }}
+      nodePort: {{ .amqp }}
+      {{- end }}
+      {{- end }}
     - name: mqtt
       port: 1883
       targetPort: mqtt
     - name: stomp
       port: 61613
       targetPort: stomp
+      {{- with $svc.nodePorts }}
+      {{- if .stomp }}
+      nodePort: {{ .stomp }}
+      {{- end }}
+      {{- end }}
+    - name: management
+      port: 15672
+      targetPort: management
+      {{- with $svc.nodePorts }}
+      {{- if .management }}
+      nodePort: {{ .management }}
+      {{- end }}
+      {{- end }}
   selector:
-    app: rabbitmq
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- include "scada.match" (dict "app" "rabbitmq" "ctx" .) | nindent 4 }}
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -112,13 +131,12 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: rabbitmq
-      app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- include "scada.match" (dict "app" "rabbitmq" "ctx" .) | nindent 6 }}
   template:
     metadata:
       labels:
         {{- include "scada.labels" . | nindent 8 }}
-        app: rabbitmq
+        {{- include "scada.match" (dict "app" "rabbitmq" "ctx" .) | nindent 8 }}
     spec:
       containers:
         - name: rabbitmq
@@ -130,9 +148,18 @@ spec:
               containerPort: 1883
             - name: stomp
               containerPort: 61613
+            - name: management
+              containerPort: 15672
           volumeMounts:
             - name: config
-              mountPath: /etc/rabbitmq
+              mountPath: /etc/rabbitmq/enabled_plugins
+              subPath: enabled_plugins
+            - name: config
+              mountPath: /etc/rabbitmq/rabbitmq.conf
+              subPath: rabbitmq.conf
+            - name: config
+              mountPath: /etc/rabbitmq/definitions.json
+              subPath: definitions.json
             - name: data
               mountPath: /var/lib/rabbitmq
       volumes:
@@ -143,8 +170,5 @@ spec:
     - metadata:
         name: data
       spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 5Gi
+        {{- include "scada.claim" (dict "size" .Values.rabbitmq.storage "class" .Values.rabbitmq.storageClass) | nindent 8 }}
 {{- end }}

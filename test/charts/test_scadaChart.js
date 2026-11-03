@@ -149,6 +149,37 @@ describe('scada chart', function() {
         );
     });
 
+    it('keeps extra labels on the postgres selector', function() {
+        const mark = `st${Math.random().toString(36).slice(2, 6)}`;
+        const rendered = render(`image: example.invalid/scada:1\nextraLabels:\n  stage: ${mark}\n`);
+        const block = rendered.split('kind: StatefulSet')[1];
+        const sel = block.slice(block.indexOf('matchLabels:'), block.indexOf('template:'));
+        assert.strictEqual(
+            sel.includes(`stage: "${mark}"`) && sel.includes('app.kubernetes.io/instance') === false,
+            true,
+            'the postgres selector dropped the extra label or kept the instance key'
+        );
+    });
+
+    it('keeps postgres data under the named directory', function() {
+        const rendered = render('image: example.invalid/scada:1\n');
+        assert.strictEqual(
+            rendered.includes('name: PGDATA') && rendered.includes('/var/lib/postgresql/data/pgdata'),
+            true,
+            'the postgres container lost PGDATA'
+        );
+    });
+
+    it('uses the named postgres claim', function() {
+        const size = `${1 + Math.floor(Math.random() * 8)}Gi`;
+        const rendered = render(`image: example.invalid/scada:1\npostgres:\n  storage: ${size}\n  storageClass: topolvm\n`);
+        assert.strictEqual(
+            rendered.includes(`storage: "${size}"`) && rendered.includes('storageClassName: "topolvm"'),
+            true,
+            'the chart ignored the postgres claim'
+        );
+    });
+
     it('binds Postgres credentials from the named secret', function() {
         const secret = `pg-${Math.random().toString(36).slice(2, 8)}`;
         const rendered = render(`image: example.invalid/scada:1\npostgres:\n  enabled: true\n  secret: ${secret}\n`);
@@ -279,6 +310,17 @@ describe('scada chart', function() {
         assert.ok(
             rendered.includes(bin),
             'the chart ignored the configured process command'
+        );
+    });
+
+    it('mounts broker configuration as files without shadowing its directory', function() {
+        const rendered = render('image: example.invalid/scada:1\n');
+        assert.ok(
+            ['enabled_plugins', 'rabbitmq.conf', 'definitions.json'].every((name) => {
+                return rendered.includes(`mountPath: /etc/rabbitmq/${name}\n`)
+                    && rendered.includes(`subPath: ${name}\n`);
+            }) && !rendered.includes('mountPath: /etc/rabbitmq\n'),
+            'mixed directory and file mounts prevent RabbitMQ from starting'
         );
     });
 
