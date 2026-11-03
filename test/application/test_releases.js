@@ -353,8 +353,8 @@ describe('releases', function() {
             ]
         }, 'cell');
         assert.deepStrictEqual(
-            cut.scada.bus,
-            [{ cluster: 'archive', url }],
+            cut.scada.buses,
+            [{ names: [machine], url }],
             'releases dropped the bus of a fan-out'
         );
     });

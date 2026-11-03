@@ -152,34 +152,35 @@ export function routesFor(document, edges, server) {
 }
 
 /**
- * Bus addresses a fan-out opens on another cluster.
+ * Bus bindings a fan-out opens on another cluster.
  *
  * @param {object} document - expanded document
  * @param {object} server - sender
- * @returns {{cluster: string, url: string}[]} bus addresses
+ * @returns {{names: string[], url: string}[]} bus bindings
  * @example
  *   busesFor({ profiles: {}, servers: [] }, { fan_out: [], profile: { id: 'cell' } });
  */
 export function busesFor(document, server) {
     const mine = clusterOf(document, server);
-    const rows = [];
-    const seen = new Set();
+    const groups = new Map();
     (server.fan_out || []).forEach((flow) => {
         const dest = serverById(document, flow.to);
         const other = clusterOf(document, dest);
-        if (other === mine || seen.has(other)) {
+        if (other === mine) {
             return;
         }
-        seen.add(other);
-        const bus = (dest.api || []).find((item) => {
-            return item.id === 'bus';
-        });
-        if (!bus) {
-            throw new Error(`system document server ${dest.id} provides no api bus`);
+        if (!groups.has(other)) {
+            const bus = (dest.api || []).find((item) => {
+                return item.id === 'bus';
+            });
+            if (!bus) {
+                throw new Error(`system document server ${dest.id} provides no api bus`);
+            }
+            groups.set(other, { names: [], url: bus.url });
         }
-        rows.push({ cluster: other, url: bus.url });
+        groups.get(other).names.push(flow.name);
     });
-    return rows;
+    return Array.from(groups.values());
 }
 
 /**

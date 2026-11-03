@@ -55,7 +55,7 @@ function withProcess(values, profile, server) {
  * @param {object} values - release values
  * @param {object[]} owned - local fan-in records
  * @param {object[]} routes - incoming sites
- * @param {object[]} buses - fan-out bus addresses
+ * @param {object[]} buses - fan-out bus bindings
  * @returns {object} values with those lists
  * @example
  *   withFlows({ image: 'example.invalid/plant:1' }, [], [], []);
@@ -69,7 +69,7 @@ function withFlows(values, owned, routes, buses) {
         copy.sites = routes;
     }
     if (buses.length > 0) {
-        copy.bus = buses;
+        copy.buses = buses;
     }
     return copy;
 }

@@ -258,7 +258,7 @@ helm upgrade --install cell-a charts/scada \
 
 ## Values
 
-These names are the chart binding. A profile does not use them. `releases` writes the projection above. The chart also reads `collectors`, `bus`, and `buses` from the values file.
+These names are the chart binding. A profile does not use them. `releases` writes the projection above, including `buses` with the fan-out document paths. The plant fills `collectors` with `withCollectors(values, command)`. `paths(document)` lists namespace paths. The chart also reads `collectors`, `bus`, and `buses` from the values file.
 
 The chart always installs supervisor-sink from `image`. Its command is fixed. `command` is the site-server argv. A collector uses `collectors[].command`.
 
