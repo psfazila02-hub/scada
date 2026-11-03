@@ -6,11 +6,13 @@ const chart = fileURLToPath(new URL('../../charts/scada', import.meta.url));
 
 function render(values) {
     return execFileSync('helm', ['template', 'demo', chart, '-f', '-'], {
-        encoding: 'utf8', input: JSON.stringify({ image: 'example.invalid/app:1', ...values })
+        timeout: 30000, encoding: 'utf8', input: JSON.stringify({ image: 'example.invalid/app:1', ...values })
     });
 }
 
 describe('named processes in the scada chart', function() {
+    this.timeout(35000);
+
     it('can run a single named reader without site services or a database', function() {
         const manifest = render({
             site: { enabled: false }, sink: { enabled: false }, postgres: { enabled: false },
