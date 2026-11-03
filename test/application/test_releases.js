@@ -10,6 +10,18 @@ function image() {
 }
 
 describe('releases', function() {
+    it('projects a collector-only profile and its broker settings', function() {
+        const target = { namespace: 'meters', prefix: 'cell' };
+        const service = { type: 'NodePort' };
+        const profile = { target, apps: { scada: { image: image(), site: { enabled: false }, sink: { enabled: false } } },
+            modules: { message_bus: { enabled: true, chart: { service } } } };
+        const cut = releases({ profiles: { cell: profile }, servers: [
+            { id: 'cell', profile: { id: 'cell', variables: { cluster: 'cell' } } }
+        ] }, 'cell');
+        assert.deepStrictEqual([cut.target, cut.scada.site, cut.scada.sink, cut.scada.rabbitmq],
+            [target, { enabled: false }, { enabled: false }, { service, enabled: true }]);
+    });
+
     it('gives the receiver the objects a fan-out sends', function() {
         const machine = token();
         const signal = token();

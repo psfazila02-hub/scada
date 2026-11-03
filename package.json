@@ -1,6 +1,6 @@
 {
   "name": "@yarkivaev/scada",
-  "version": "2.3.114",
+  "version": "2.3.115",
   "description": "SCADA domain objects, state persistence, and plant monitoring",
   "repository": {
     "type": "git",
@@ -13,7 +13,9 @@
     "./client": "./src/infrastructure/client/index.js",
     "./stateDataFake": "./src/infrastructure/persistence/stateDataFromMemory.js",
     "./startTestEdgeApi": "./src/infrastructure/http/edge/startTestEdgeApi.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./rabbitmq/definitions": "./src/infrastructure/messaging/rabbitmq/definitions.js",
+    "./rabbitmq/reconcile": "./src/infrastructure/messaging/rabbitmq/reconcile.js"
   },
   "bin": {
     "modbus-to-mqtt": "./src/bin/modbus-to-mqtt.js",

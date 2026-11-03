@@ -1,4 +1,15 @@
 role: edge
+# Override the resource name prefix when adopting an existing installation.
+prefix: ""
+createNamespace: false
+site:
+  enabled: true
+sink:
+  enabled: true
+# Labels for workloads that must stay outside immutable selectors.
+workloadLabels: {}
+# Named deployments with command, env, optional resources and hostDevices.
+processes: []
 image: ""
 command: []
 pullSecret: ""
@@ -22,6 +33,16 @@ postgres:
 rabbitmq:
   enabled: true
   deadLetter: null
+  # A named standalone PVC replaces the default volumeClaimTemplates when set.
+  claimName: ""
+  configName: ""
+  rolloutOnConfigChange: false
+  definitions: null
+  plugins: [rabbitmq_stomp, rabbitmq_mqtt, rabbitmq_management]
+  extraConfig: {}
+  resources: {}
+  readinessProbe: {}
+  livenessProbe: {}
   image: rabbitmq:3.13-management
   storage: 5Gi
   storageClass: ""

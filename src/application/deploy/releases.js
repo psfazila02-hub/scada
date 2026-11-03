@@ -18,7 +18,8 @@ function withImage(profile) {
     if (!image) {
         throw new Error('system document has no scada image');
     }
-    return { image, ...bindModules(profile, app.secret) };
+    return { image, ...(app.site && { site: app.site }), ...(app.sink && { sink: app.sink }),
+        ...bindModules(profile, app.secret) };
 }
 
 /**
@@ -109,6 +110,7 @@ export default function releases(document, cluster) {
     const profile = profileFor(expanded, host);
     assertHeld(expanded, links);
     return frozen({
+        ...(profile.target && { target: profile.target }),
         apps: passedApps(profile),
         scada: scadaRelease(expanded, host, profile, links)
     });

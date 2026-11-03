@@ -53,7 +53,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $.Release.Name }}-collector-{{ $slug }}
+  name: {{ include "scada.prefix" $ }}-collector-{{ $slug }}
   namespace: {{ $.Release.Namespace }}
   labels:
     {{- include "scada.labels" $ | nindent 4 }}
@@ -97,7 +97,7 @@ spec:
               value: {{ $maps | toJson | quote }}
             {{- if $.Values.rabbitmq.enabled }}
             - name: MQTT_URL
-              value: {{ printf "mqtt://%s-rabbitmq:1883" $.Release.Name | quote }}
+              value: {{ printf "mqtt://%s-rabbitmq:1883" (include "scada.prefix" $) | quote }}
             {{- end }}
           resources:
             {{- toYaml $.Values.resources | nindent 12 }}

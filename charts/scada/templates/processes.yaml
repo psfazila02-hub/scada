@@ -1,0 +1,88 @@
+{{- $names := dict }}
+{{- $devices := dict }}
+{{- range .Values.processes }}
+{{- $name := required "process name is required" .name }}
+{{- if hasKey $names $name }}
+{{- fail (printf "duplicate process name %s" $name) }}
+{{- end }}
+{{- $_ := set $names $name true }}
+{{- range .hostDevices }}
+{{- if hasKey $devices . }}
+{{- fail (printf "processes %s and %s both claim %s" $name (get $devices .) .) }}
+{{- end }}
+{{- $_ := set $devices . $name }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "scada.prefix" $ }}-{{ $name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "scada.labels" $ | nindent 4 }}
+    app: {{ $name }}
+    {{- with $.Values.workloadLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+    rollingUpdate: null
+  selector:
+    matchLabels:
+      {{- include "scada.match" (dict "app" $name "ctx" $) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "scada.labels" $ | nindent 8 }}
+        app: {{ $name }}
+        {{- with $.Values.workloadLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- if and $.Values.rabbitmq.enabled $.Values.rabbitmq.rolloutOnConfigChange }}
+      annotations:
+        checksum/broker: {{ include (print $.Template.BasePath "/rabbitmq-config.yaml") $ | sha256sum }}
+      {{- end }}
+    spec:
+      {{- with $.Values.pullSecret }}
+      imagePullSecrets:
+        - name: {{ . }}
+      {{- end }}
+      {{- with .podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ required "process image is required" (default $.Values.image .image) | quote }}
+          imagePullPolicy: IfNotPresent
+          command: {{ required "process command is required" .command | toJson }}
+          {{- if .hostDevices }}
+          securityContext:
+            privileged: true
+          volumeMounts:
+            {{- range $index, $path := .hostDevices }}
+            - name: serial-{{ add1 $index }}
+              mountPath: {{ $path | quote }}
+            {{- end }}
+          {{- end }}
+          {{- with .env }}
+          env:
+            {{- range $key, $value := . }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- end }}
+          resources:
+            {{- toYaml (default $.Values.resources .resources) | nindent 12 }}
+      {{- with .hostDevices }}
+      volumes:
+        {{- range $index, $path := . }}
+        - name: serial-{{ add1 $index }}
+          hostPath:
+            path: {{ $path | quote }}
+            type: CharDevice
+        {{- end }}
+      {{- end }}
+{{- end }}

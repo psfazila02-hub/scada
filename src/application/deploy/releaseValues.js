@@ -16,7 +16,7 @@ function bindOne(name, spec, secret) {
         return ['postgres', { enabled: spec.enabled !== false, secret: secret || 'scada-postgres' }];
     }
     if (name === 'message_bus') {
-        return ['rabbitmq', { enabled: spec.enabled !== false,
+        return ['rabbitmq', { ...spec.chart, enabled: spec.enabled !== false,
             ...(spec.dead_letter ? { deadLetter: spec.dead_letter } : {}) }];
     }
     if (name === 'telemetry_store') {
@@ -111,6 +111,9 @@ function plantUrl(source, api) {
     }
     if (!api && listed.length > 1) {
         throw new Error(`system document server ${source.id} must name one api`);
+    }
+    if (api && api !== 'plant') {
+        return '';
     }
     const plant = listed.find((item) => {
         return item.id === 'plant';

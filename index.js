@@ -102,3 +102,5 @@ export { default as appReleases } from './src/application/deploy/appReleases.js'
 export { default as withCollectors } from './src/application/deploy/withCollectors.js';
 export { default as pointPaths } from './src/application/deploy/pointPaths.js';
 export { clusterOf, serverFor } from './src/application/deploy/releaseNodes.js';
+export { default as executeRelease } from './src/infrastructure/deploy/executeRelease.js';
+export { default as collectorProcesses } from './src/application/deploy/collectorProcesses.js';
