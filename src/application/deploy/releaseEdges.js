@@ -46,12 +46,7 @@ function remember(edges, edge) {
         prior.push(edge.object);
     }
     found.sides[edge.side] = prior;
-    const left = found.sides.out;
-    const right = found.sides.in;
-    if (left && right && !sameObjects(left, right)) {
-        throw new Error(`system document edge from ${edge.from} to ${edge.to} lists different objects`);
-    }
-    found.objects = (left || right).slice();
+    found.objects = (found.sides.out || found.sides.in).slice();
     if (edge.api) {
         found.api = edge.api;
     }
@@ -90,6 +85,14 @@ export function edgesOf(document) {
                 to: server.id
             });
         });
+    });
+    edges.forEach((edge) => {
+        const left = edge.sides.out;
+        const right = edge.sides.in;
+        if (left && right && !sameObjects(left, right)) {
+            throw new Error(`system document edge from ${edge.from} to ${edge.to} lists different objects`);
+        }
+        edge.objects = (left || right).slice();
     });
     return edges;
 }

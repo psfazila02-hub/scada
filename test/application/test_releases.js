@@ -166,6 +166,52 @@ describe('releases', function() {
         );
     });
 
+    it('accepts an edge whose two sides list the same objects', function() {
+        const first = token();
+        const second = token();
+        const signal = token();
+        const url = `http://192.0.2.${Math.floor(Math.random() * 200) + 1}:30300/api/v1`;
+        const cut = releases({
+            namespace: [
+                { id: first, nodes: [{ id: signal }] },
+                { id: second, nodes: [{ id: signal }] }
+            ],
+            profiles: {
+                archive: { apps: { scada: { image: image() } } },
+                cell: { apps: { scada: { image: image() } } }
+            },
+            servers: [
+                {
+                    api: [{ id: 'plant', url }],
+                    fan_in: [
+                        { from: 'modbus://192.0.2.9:502', name: `${first}/${signal}` },
+                        { from: 'modbus://192.0.2.9:502', name: `${second}/${signal}` }
+                    ],
+                    fan_out: [
+                        { name: `${first}/${signal}`, to: 'archive' },
+                        { name: `${second}/${signal}`, to: 'archive' }
+                    ],
+                    id: 'cell',
+                    objects: [first, second],
+                    profile: { id: 'cell', variables: { cluster: 'cell' } }
+                },
+                {
+                    fan_in: [
+                        { api: 'plant', from: 'cell', name: `${first}/${signal}` },
+                        { api: 'plant', from: 'cell', name: `${second}/${signal}` }
+                    ],
+                    id: 'archive',
+                    profile: { id: 'archive', variables: { cluster: 'archive' } }
+                }
+            ]
+        }, 'archive');
+        assert.deepStrictEqual(
+            cut.scada.sites,
+            [{ baseUrl: url, machines: [first, second] }],
+            'releases dropped one object of a matching two-sided edge'
+        );
+    });
+
     it('copies the object a local flow names', function() {
         const machine = token();
         const signal = token();
