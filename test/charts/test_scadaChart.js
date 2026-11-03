@@ -541,3 +541,15 @@ describe('scada chart', function() {
         );
     });
 });
+
+
+describe('ingest dead-letter configuration', function() {
+    it('renders a durable quarantine queue and policy without changing existing queue arguments', function() {
+        const definitions = broker(render('image: example.invalid/app:1\nrabbitmq:\n  deadLetter:\n    queue: scada.ingest.dlq\n'));
+        assert.ok(definitions.queues.some((queue) => { return queue.name === 'scada.ingest.dlq' && queue.durable; }));
+        const policy = definitions.policies.find((item) => { return item.name === 'ingest-dlq'; });
+        assert.equal(policy.definition['dead-letter-routing-key'], 'scada.ingest.dlq');
+        assert.ok(new RegExp(policy.pattern, 'u').test('scada.segments.ingest'));
+        assert.ok(!new RegExp(policy.pattern, 'u').test('scada.ingest.dlq'));
+    });
+});

@@ -32,12 +32,19 @@ export default function segmentCodec(collector) {
     return {
         async accept(raw) {
             try {
-                const parsed = JSON.parse(raw.payload);
+                let parsed;
+                let record;
+                try {
+                    parsed = JSON.parse(raw.payload);
+                    record = parsed.type === 'split-family' ? familyRecord(parsed) : segmentNormalize(parsed);
+                } catch (error) {
+                    error.permanent = true;
+                    throw error;
+                }
                 if (parsed.type === 'split-family') {
-                    await collector.accept(familyRecord(parsed));
+                    await collector.accept(record);
                     return;
                 }
-                const record = segmentNormalize(parsed);
                 await collector.accept(record);
             } catch (error) {
                 processingErrorLog('segment_codec', error, { destination: raw.destination, payload: raw.payload });

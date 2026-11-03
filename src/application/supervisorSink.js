@@ -23,6 +23,10 @@ const appRoot = path.dirname(fileURLToPath(import.meta.url));
  */
 export function readDeploymentConfig(env) {
     const root = path.join(appRoot, '../..');
+    const prefetch = Number(env.STOMP_PREFETCH || '128');
+    if (!Number.isSafeInteger(prefetch) || prefetch < 1) {
+        throw new Error('STOMP_PREFETCH must be a positive safe integer');
+    }
     return {
         stomp: env.STOMP_URL,
         postgres: env.POSTGRES_URL,
@@ -39,6 +43,8 @@ export function readDeploymentConfig(env) {
         requestTimeoutMs: parseRequestTimeoutMs(env.REQUEST_TIMEOUT_MS),
         pipelines: env.SINK_PIPELINES !== 'false',
         pipeline: {
+            prefetch,
+            deadLetter: env.SEGMENTS_DEAD_LETTER_ENABLED === 'true',
             size: parseInt(env.BATCH_SIZE || '50', 10),
             interval: parseInt(env.FLUSH_INTERVAL || '2', 10),
             threshold: parseInt(env.CIRCUIT_THRESHOLD || '5', 10),

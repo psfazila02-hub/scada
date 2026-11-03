@@ -40,7 +40,7 @@ function isHeartbeat(parsed) {
  * @param {object} codec - downstream codec
  * @returns {Promise<void>}
  */
-async function flushLane(lane, codec) {
+async function flushLane(lane, codec, deadLetter) {
     const batch = lane.pending;
     if (!batch) {
         return;
@@ -57,9 +57,11 @@ async function flushLane(lane, codec) {
         }
     } catch (error) {
         for (const settle of batch.settles) {
-            settle.nack();
+            settle.nack(!(deadLetter && error.permanent));
         }
-        throw error;
+        if (!error.permanent) {
+            throw error;
+        }
     }
 }
 
@@ -78,7 +80,12 @@ async function bufferHeartbeat(ctx, envelope, parsed) {
         lane.pending.payload = envelope.payload;
         lane.pending.settles.push(envelope.settle);
     } else {
-        await api.flush(lane);
+        try {
+            await api.flush(lane);
+        } catch (error) {
+            envelope.settle.nack(true);
+            throw error;
+        }
         const pending = {
             key,
             destination: envelope.destination,
@@ -88,7 +95,7 @@ async function bufferHeartbeat(ctx, envelope, parsed) {
         const timer = setTimeout(() => {
             lane.queue = lane.queue.then(() => {
                 return api.flush(lane);
-            });
+            }).catch(() => { return undefined; });
         }, intervalMs);
         Object.assign(lane, { pending, timer });
     }
@@ -110,12 +117,12 @@ async function step(ctx, envelope, parsed) {
         await bufferHeartbeat(ctx, envelope, parsed);
         return;
     }
-    await ctx.api.flush(ctx.lane);
     try {
+        await ctx.api.flush(ctx.lane);
         await ctx.codec.accept({ destination: envelope.destination, payload: envelope.payload });
         envelope.settle.ack();
     } catch (error) {
-        envelope.settle.nack();
+        envelope.settle.nack(!(ctx.deadLetter && error.permanent));
         throw error;
     }
 }
@@ -148,9 +155,18 @@ export default function segmentCoalesce(codec, options = {}) {
     const lanes = new Map();
     const api = {
         accept(envelope) {
-            const parsed = JSON.parse(envelope.payload);
+            let parsed;
+            try {
+                parsed = JSON.parse(envelope.payload);
+                if (!parsed || typeof parsed !== 'object') {
+                    throw new Error('Segment must be an object');
+                }
+            } catch {
+                envelope.settle.nack(!options.deadLetter);
+                return Promise.resolve();
+            }
             const lane = laneState(lanes, parsed.machine);
-            const ctx = { api, lane, codec, size, intervalMs };
+            const ctx = { api, lane, codec, size, intervalMs, deadLetter: options.deadLetter };
             lane.queue = lane.queue.then(() => {
                 return step(ctx, envelope, parsed);
             }).catch(() => {
@@ -159,7 +175,7 @@ export default function segmentCoalesce(codec, options = {}) {
             return lane.queue;
         },
         async flush(lane) {
-            await flushLane(lane, codec);
+            await flushLane(lane, codec, options.deadLetter);
         }
     };
     return api;

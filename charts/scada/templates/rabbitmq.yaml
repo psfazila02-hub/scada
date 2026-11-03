@@ -35,6 +35,11 @@
 {{- if $outgoing }}
 {{- $queue = append $queue (dict "name" "scada.telemetry.outbox" "vhost" "/" "durable" true "auto_delete" false) -}}
 {{- end }}
+{{- $policies := list -}}
+{{- with .Values.rabbitmq.deadLetter }}
+{{- $queue = append $queue (dict "name" .queue "vhost" "/" "durable" true "auto_delete" false) -}}
+{{- $policies = append $policies (dict "name" "ingest-dlq" "vhost" "/" "pattern" "^scada\\.(segments|operations|telemetry)\\.ingest$" "apply-to" "queues" "priority" 10 "definition" (dict "dead-letter-exchange" "" "dead-letter-routing-key" .queue)) -}}
+{{- end }}
 {{- $binding := list -}}
 {{- range $key := $ingest }}
 {{- $binding = append $binding (dict "source" "scada.telemetry" "vhost" "/" "destination" "scada.telemetry.ingest" "destination_type" "queue" "routing_key" $key) -}}
@@ -54,6 +59,7 @@
   "permissions" (list (dict "user" "guest" "vhost" "/" "configure" ".*" "write" ".*" "read" ".*"))
   "exchanges" $exchange
   "queues" $queue
+  "policies" $policies
   "bindings" $binding
 -}}
 apiVersion: v1

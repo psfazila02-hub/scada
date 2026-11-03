@@ -32,6 +32,10 @@ spec:
             - name: STATE_HTTP_PORT
               value: {{ .Values.service.internalPort | quote }}
             {{- include "scada.linkEnv" . | nindent 12 }}
+            {{- range .Values.env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
           readinessProbe:
             tcpSocket:
               port: state
