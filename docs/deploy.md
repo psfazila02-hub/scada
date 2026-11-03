@@ -2,7 +2,7 @@
 
 Two levels.
 
-The **system document** is one file for the whole plant: every machine, every server, every app. A plant package stores that file and does not project it itself.
+The **system document** is one file for the whole plant: every machine, every server, every app. A plant package stores that file and does not project it itself. `readDocument(text)` parses the YAML subset the document uses: maps, lists, and scalars.
 
 A **release** is one Helm install of `charts/scada` into one cluster. `releases(document, cluster)` cuts the system document down to the values of that cluster. One release never describes a second cluster.
 

@@ -94,5 +94,6 @@ export { default as coverageCursor } from './src/application/mcp/coverageCursor.
 export { default as sqlGuard } from './src/domain/sql/sqlGuard.js';
 export { default as analyticsMcp } from './src/application/mcp/analyticsMcp.js';
 export { default as expand } from './src/application/deploy/expand.js';
+export { default as readDocument } from './src/application/deploy/readDocument.js';
 export { default as releases } from './src/application/deploy/releases.js';
 export { clusterOf, serverFor } from './src/application/deploy/releaseNodes.js';
