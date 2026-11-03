@@ -295,6 +295,12 @@ provide RabbitMQ chart settings in `modules.message_bus.chart`. The
 `releases(document, cluster)` projection returns the target and chart values.
 The default profile still renders the existing site and sink.
 
+`subscriptions(expandedDocument, sourceId)` returns the outgoing server
+subscriptions as `{ from, to, name, api? }`. It combines sender `fan_out` and
+receiver `fan_in` declarations, keeping each expanded stream path and any
+explicit service selected by the receiver. Declaring the same subscription on
+both sides produces a single row.
+
 Use `collectorProcesses(machines, describe, project)` to derive workloads from
 the selected server's source rows. For each row, `describe(row)` returns a
 process name, command and optional environment and resources. Rows with the

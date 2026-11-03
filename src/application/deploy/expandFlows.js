@@ -1,4 +1,6 @@
 import { assertLeaf, deviceFlows, expandObjects } from './expandDevices.js';
+import { availableNames, expandApis, publishedNames } from './publishedStreams.js';
+import { serviceOf } from './releaseNodes.js';
 import { isAddress, picked } from './expandPattern.js';
 
 /**
@@ -32,18 +34,17 @@ function chosen(pattern, pool, strict) {
  * @example
  *   poolOf({ fanIn: [], fanOut: [] }, 'archive');
  */
-function poolOf(source, receiverId) {
+function poolOf(source, receiverId, api) {
+    const available = availableNames(source, api);
     const aimed = source.fanOut.filter((flow) => {
         return flow.to === receiverId;
     }).map((flow) => {
         return flow.name;
     });
     if (aimed.length > 0) {
-        return aimed;
+        return aimed.filter((name) => { return available.includes(name); });
     }
-    return source.fanIn.map((flow) => {
-        return flow.name;
-    });
+    return available;
 }
 
 /**
@@ -60,9 +61,7 @@ function poolOf(source, receiverId) {
  */
 function expandOut(server, ids, strict) {
     const rows = [];
-    const streams = server.fanIn.map((flow) => {
-        return flow.name;
-    });
+    const streams = availableNames(server);
     server.patternsOut.forEach((flow) => {
         const destinations = picked(flow.to, ids, 'server', true);
         const names = picked(flow.name, streams, 'path', strict);
@@ -74,6 +73,18 @@ function expandOut(server, ids, strict) {
         });
     });
     return rows;
+}
+
+/* A fixed object path can be held implicitly, but an API-only stream requires its service. */
+function incomingNames(source, receiver, flow, strict) {
+    const api = serviceOf(source, flow.api)?.id;
+    const pool = poolOf(source, receiver, api);
+    const names = chosen(flow.name, pool, strict);
+    if (strict && api && publishedNames(source).includes(flow.name)
+        && !availableNames(source, api).includes(flow.name)) {
+        throw new Error(`system document stream ${flow.name} is unavailable on api ${flow.api}`);
+    }
+    return names;
 }
 
 /**
@@ -101,7 +112,7 @@ function expandIn(server, drafts, strict) {
             const source = drafts.find((item) => {
                 return item.id === sourceId;
             });
-            chosen(flow.name, poolOf(source, server.id), strict).forEach((path) => {
+            incomingNames(source, server.id, flow, strict).forEach((path) => {
                 assertLeaf(server.objects, path);
                 const copy = { from: sourceId, name: path };
                 if (flow.api) {
@@ -144,7 +155,7 @@ function draftOne(server, paths, mappings) {
         remote.push(flow);
     });
     return {
-        api: server.api,
+        api: expandApis(server.api, paths, objects),
         fanIn: local,
         id: server.id,
         objects,

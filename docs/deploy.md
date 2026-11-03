@@ -19,7 +19,12 @@ A server has four parts. Each part is optional.
 | `fan_out` | one flow out of this server |
 | `api` | services other servers may call. `plant` is the plant HTTP API. `bus` is the message bus those servers open. A bus url carries no password. A panel that only the local HMI uses is not an api |
 
-Telemetry lives in `fan_in` and has no state. `ownership` is state this server edits. A server may omit any part.
+An API can also declare `publishes`, a list of stream records such as
+`{ name: mill/unit/status, contract: events }`. The name is a namespace path
+or pattern. The application interprets the contract. These streams are available
+to outgoing links and subscriptions to that API without starting a collector.
+
+Telemetry in `fan_in` has no state. `ownership` is state this server edits. A server may omit any part.
 
 A flow has two fields, plus `mapping` when a device publishes several parameters. One flow has one name. Several names are several flows.
 

@@ -96,6 +96,7 @@ export { default as analyticsMcp } from './src/application/mcp/analyticsMcp.js';
 export { default as expand } from './src/application/deploy/expand.js';
 export { default as readDocument } from './src/application/deploy/readDocument.js';
 export { default as mergeDocuments } from './src/application/deploy/mergeDocuments.js';
+export { default as subscriptions } from './src/application/deploy/subscriptions.js';
 export { default as releases } from './src/application/deploy/releases.js';
 export { default as paths } from './src/application/deploy/paths.js';
 export { default as appReleases } from './src/application/deploy/appReleases.js';

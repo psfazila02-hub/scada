@@ -1,5 +1,5 @@
 import { isAddress } from './expandPattern.js';
-import { clusterOf, objectPath, serverById } from './releaseNodes.js';
+import { clusterOf, objectPath, serverById, serviceOf } from './releaseNodes.js';
 
 /**
  * Maps one module name onto a chart product.
@@ -103,22 +103,8 @@ export function machinesOf(server) {
  *   plantUrl({ api: [{ id: 'plant', url: 'http://192.0.2.10/api/v1' }], id: 'cell' });
  */
 function plantUrl(source, api) {
-    const listed = source.api || [];
-    if (api && !listed.some((item) => {
-        return item.id === api;
-    })) {
-        throw new Error(`system document server ${source.id} provides no api ${api}`);
-    }
-    if (!api && listed.length > 1) {
-        throw new Error(`system document server ${source.id} must name one api`);
-    }
-    if (api && api !== 'plant') {
-        return '';
-    }
-    const plant = listed.find((item) => {
-        return item.id === 'plant';
-    });
-    return plant ? plant.url : '';
+    const service = serviceOf(source, api);
+    return service?.id === 'plant' ? service.url : '';
 }
 
 /**

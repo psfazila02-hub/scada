@@ -116,3 +116,16 @@ export function profileFor(document, server) {
     const values = { ...(profile.variables || {}), ...(server.profile.variables || {}) };
     return { ...profile, variables: values };
 }
+
+/** Selects an explicitly named service or the sole service of the source. */
+export function serviceOf(source, api) {
+    const listed = source.api || [];
+    if (!api && listed.length > 1) {
+        throw new Error(`system document server ${source.id} must name one api`);
+    }
+    const service = api ? listed.find((item) => { return item.id === api; }) : listed[0];
+    if (api && !service) {
+        throw new Error(`system document server ${source.id} provides no api ${api}`);
+    }
+    return service;
+}
