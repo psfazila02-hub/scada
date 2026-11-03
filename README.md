@@ -295,9 +295,12 @@ provide RabbitMQ chart settings in `modules.message_bus.chart`. The
 `releases(document, cluster)` projection returns the target and chart values.
 The default profile still renders the existing site and sink.
 
-Use `collectorProcesses(machines, app, project)` to match the profile's
-`processGroups` against source paths. Supply a plant adapter as `project`
-to convert each group's sources to environment variables and host devices.
+Use `collectorProcesses(machines, describe, project)` to derive workloads from
+the selected server's source rows. For each row, `describe(row)` returns a
+process name, command and optional environment and resources. Rows with the
+same name must describe the same process. `project(descriptor, rows)` converts
+its sources into adapter-specific environment variables and host devices. Process
+order follows the first occurrence of each name in the source rows.
 The packaged `charts/scada` chart renders the resulting `processes` as
 named Deployments. A configured broker claim name selects a standalone PVC.
 The default storage mode uses StatefulSet claim templates.
