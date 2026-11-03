@@ -484,3 +484,16 @@ describe('releases', function() {
         );
     });
 });
+
+
+describe('message bus dead-letter DSL', function() {
+    it('preserves an opt-in quarantine queue through release projection', function() {
+        const queue = 'scada.ingest.dlq';
+        const cut = releases({
+            profiles: { archive: { apps: { scada: { image: image() } },
+                modules: { message_bus: { enabled: true, dead_letter: { queue } } } } },
+            servers: [{ id: 'archive', profile: { id: 'archive', variables: { cluster: 'archive' } } }]
+        }, 'archive');
+        assert.deepStrictEqual(cut.scada.rabbitmq.deadLetter, { queue });
+    });
+});

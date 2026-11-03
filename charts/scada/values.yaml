@@ -21,6 +21,7 @@ postgres:
   data: /var/lib/postgresql/data/pgdata
 rabbitmq:
   enabled: true
+  deadLetter: null
   image: rabbitmq:3.13-management
   storage: 5Gi
   storageClass: ""

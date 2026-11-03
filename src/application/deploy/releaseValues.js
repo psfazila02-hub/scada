@@ -16,7 +16,8 @@ function bindOne(name, spec, secret) {
         return ['postgres', { enabled: spec.enabled !== false, secret: secret || 'scada-postgres' }];
     }
     if (name === 'message_bus') {
-        return ['rabbitmq', { enabled: spec.enabled !== false }];
+        return ['rabbitmq', { enabled: spec.enabled !== false,
+            ...(spec.dead_letter ? { deadLetter: spec.dead_letter } : {}) }];
     }
     if (name === 'telemetry_store') {
         return ['clickhouse', { enabled: spec.enabled !== false }];

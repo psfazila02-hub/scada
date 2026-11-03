@@ -274,3 +274,15 @@ Depend on a pinned version (`"@yarkivaev/scada": "…#v2.3.46"`), not a local pa
 ## CI/CD
 
 GitHub Actions via `yarkivaev/npm-workflows` (lint, test, version check). This repo publishes an npm package only; container images are built in downstream deploy repos.
+
+### Ingest delivery and quarantine
+
+`STOMP_PREFETCH` sets a positive, bounded segment delivery window (default 128).
+`SEGMENTS_DEAD_LETTER_ENABLED=true` opts into rejecting malformed segment records
+without requeue; transient persistence failures are retried. Enable this only with
+a durable DLQ and routing policy. In the deployment DSL, configure
+`profiles.<profile>.modules.message_bus.dead_letter.queue: scada.ingest.dlq`.
+The scada chart declares the queue and applies an ingest-only dead-letter policy,
+without changing existing queue arguments. The profile `env` is passed to both
+site-server and supervisor-sink. DLQ records retain the original body and RabbitMQ
+`x-death` metadata for inspection and deliberate replay; they are not auto-expired.

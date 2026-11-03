@@ -179,3 +179,35 @@ describe('segmentCoalesce', function() {
         assert.strictEqual(second.state.acks, 1, 'a failed segment stalled the machine lane');
     });
 });
+
+
+describe('segment poison-message quarantine', function() {
+    it('dead letters malformed JSON without blocking the next valid segment', async function() {
+        const nacks = [];
+        let acks = 0;
+        const coalesce = segmentCoalesce({ accept: async () => {} }, { deadLetter: true });
+        await coalesce.accept({ payload: '{', settle: { nack: (requeue) => {return nacks.push(requeue)} } });
+        await coalesce.accept({ payload: JSON.stringify({ machine: 'm', duration: 1 }),
+            settle: { ack: () => { acks += 1; }, nack: () => {} } });
+        assert.deepStrictEqual(nacks, [false]);
+        assert.strictEqual(acks, 1);
+    });
+
+    it('retries transient errors but quarantines invalid records', async function() {
+        const nacks = [];
+        let calls = 0;
+        const coalesce = segmentCoalesce({ accept: async () => {
+            const error = new Error('failure');
+            error.permanent = calls === 0;
+            calls += 1;
+            throw error;
+        } }, { deadLetter: true });
+        for (let i = 0; i < 2; i += 1) {
+            // Deliberately exercise successive deliveries on the same lane.
+            // eslint-disable-next-line no-await-in-loop
+            await coalesce.accept({ payload: JSON.stringify({ machine: 'm', duration: 1 }),
+                settle: { nack: (requeue) => {return nacks.push(requeue)} } });
+        }
+        assert.deepStrictEqual(nacks, [false, true]);
+    });
+});

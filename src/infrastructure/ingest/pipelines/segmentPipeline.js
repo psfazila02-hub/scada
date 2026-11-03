@@ -60,6 +60,7 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
     const dispatch = segmentDispatch(continued, retagSink(pool), splitSink, closeOrphanOpen(pool), pool);
     const coalesce = segmentCoalesce(segmentCodec(dispatch), {
         size: config.size,
+        deadLetter: config.deadLetter,
         interval: config.interval
     });
     const destination = config.segmentsDestination || segmentsIngestDestination;
@@ -68,7 +69,8 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
         passcode: config.passcode,
         host: config.host,
         serial: false,
-        manualAck: true
+        manualAck: true,
+        prefetch: config.prefetch
     });
     const silence = silentOpenWatch(closeSilentOpen(pool), budget, {
         intervalMs: (config.poll || 5) * 1000
