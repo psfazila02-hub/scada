@@ -134,7 +134,7 @@ Main entry (`import { … } from '@yarkivaev/scada'`):
 | `pgTimeline`, `pgAlerts`, `stateDataFromPool`, `stateDataFromMemory` | State ports |
 | `stompTimeline`, `stompAlerts`, `userDecisions` | STOMP messaging |
 | `machineOwners`, `ownerTimeline`, `httpTimeline`, `httpOperations` | Owner-routed timeline and operations write (local or edge HTTP) |
-| `mqttMetrics`, `modbusMqtt`, `activityTracking`, `amqpMetricsIngest` | Ingest pipelines |
+| `mqttMetrics`, `modbusMqtt`, `modbusPublish`, `activityTracking`, `amqpMetricsIngest` | Ingest pipelines |
 | `analyticsMcp`, `namespaceTree`, `coverageSpans`, `coverageOverlay`, `coverageCursor`, `sqlGuard` | Analytics MCP, path index, coverage spans, timeline-name overlay, checkpoint-or-sample cursor, read-only SQL guard |
 
 Subpath exports:
@@ -184,6 +184,7 @@ Alert and HMI copy are inject-only: pass `translations` into `siteServer` / `pla
 | Binary | Role |
 |--------|------|
 | `supervisor-sink` | STOMP → PostgreSQL ingest + edge HTTP API (`STATE_HTTP_PORT`, default 8081) |
+| `modbus-to-mqtt` | Poll Modbus and publish `STREAM` + `MAPPING` document paths (`src/bin/modbus-to-mqtt.js`) |
 
 Full plant API with site-specific routes: plant packages call `siteServer` from this package.
 
@@ -222,6 +223,10 @@ Set `SINK_DB_PROFILE=central|edge`. Migrations run at supervisor-sink startup vi
 | `MQTT_URL`, `MQTT_TOPICS` | Optional metrics ingest |
 | `CLICKHOUSE_URL` | Central metrics sink |
 | `PORT` | Plant API port (siteServer, default 3000) |
+
+## Deploy
+
+The deployment DSL is specified in [docs/deploy.md](docs/deploy.md). A flow is `from` and `name`. An object listed on a node is state that node is responsible for. Profile, cluster, and modules are implementation. One Helm release of `charts/scada` is one cluster, cut from that document.
 
 ## Testing
 

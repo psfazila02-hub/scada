@@ -1,0 +1,115 @@
+{{- if .Values.collectors }}
+{{- $groups := dict -}}
+{{- range $item := .Values.collectors }}
+{{- $device := include "scada.device" $item.address | trim -}}
+{{- if not $device }}
+{{- fail "collector has no address" }}
+{{- end }}
+{{- if not $item.path }}
+{{- fail (printf "collector %s has no path" $device) }}
+{{- end }}
+{{- if not $item.command }}
+{{- fail (printf "collector %s has no command" $device) }}
+{{- end }}
+{{- $token := $item.command | toJson -}}
+{{- $prior := list -}}
+{{- if hasKey $groups $token }}
+{{- $prior = index $groups $token -}}
+{{- end }}
+{{- $groups = set $groups $token (append $prior $item) -}}
+{{- end }}
+{{- $claimed := dict -}}
+{{- range $token, $items := $groups }}
+{{- range $item := $items }}
+{{- $device := include "scada.device" $item.address | trim -}}
+{{- if hasPrefix "/dev/" $device }}
+{{- if and (hasKey $claimed $device) (ne (index $claimed $device) $token) }}
+{{- fail (printf "collectors on %s use different commands" $device) }}
+{{- end }}
+{{- $claimed = set $claimed $device $token -}}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- range $token, $items := $groups }}
+{{- $argv := (index $items 0).command -}}
+{{- $slug := include "scada.slug" (index $argv (sub (len $argv) 1)) | trim -}}
+{{- if not $slug }}
+{{- fail (printf "collector %s has no name" $token) }}
+{{- end }}
+{{- $paths := list -}}
+{{- $maps := list -}}
+{{- $addresses := list -}}
+{{- $serials := list -}}
+{{- range $item := $items }}
+{{- $paths = append $paths $item.path -}}
+{{- $maps = append $maps ($item.mapping | default (dict)) -}}
+{{- $addresses = append $addresses $item.address -}}
+{{- $device := include "scada.device" $item.address | trim -}}
+{{- if and (hasPrefix "/dev/" $device) (not (has $device $serials)) }}
+{{- $serials = append $serials $device -}}
+{{- end }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $.Release.Name }}-collector-{{ $slug }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "scada.labels" $ | nindent 4 }}
+    app: collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: collector
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+      scada/command: {{ $slug }}
+  template:
+    metadata:
+      labels:
+        {{- include "scada.labels" $ | nindent 8 }}
+        app: collector
+        scada/command: {{ $slug }}
+    spec:
+      {{- with $.Values.pullSecret }}
+      imagePullSecrets:
+        - name: {{ . }}
+      {{- end }}
+      containers:
+        - name: collector
+          image: {{ required "image is required" $.Values.image | quote }}
+          command: {{ $argv | toJson }}
+          {{- if $serials }}
+          securityContext:
+            privileged: true
+          volumeMounts:
+            {{- range $serials }}
+            - name: {{ include "scada.slug" . | trim }}
+              mountPath: {{ . }}
+            {{- end }}
+          {{- end }}
+          env:
+            - name: ADDRESS
+              value: {{ $addresses | toJson | quote }}
+            - name: STREAM
+              value: {{ $paths | toJson | quote }}
+            - name: MAPPING
+              value: {{ $maps | toJson | quote }}
+            {{- if $.Values.rabbitmq.enabled }}
+            - name: MQTT_URL
+              value: {{ printf "mqtt://%s-rabbitmq:1883" $.Release.Name | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+      {{- if $serials }}
+      volumes:
+        {{- range $serials }}
+        - name: {{ include "scada.slug" . | trim }}
+          hostPath:
+            path: {{ . }}
+            type: CharDevice
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- end }}
