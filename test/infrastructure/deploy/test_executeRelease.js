@@ -32,12 +32,13 @@ describe('executeRelease', () => {
     for (const [action, expected] of [
         ['render', ['helm']],
         ['diff', ['helm', check, 'diff --server-side --field-manager=device-release -f -']],
-        ['check', ['helm', check, `${apply  } --dry-run=server`]],
-        ['check-adoption', ['helm', check, `${adopt  } --dry-run=server`]],
-        ['apply', ['helm', check, `${apply  } --dry-run=server`, apply, ...wait, 'afterReady']],
-        ['adopt', ['helm', check, `${adopt  } --dry-run=server`, adopt, ...wait, 'afterReady']]
+        ['check', ['helm', check, `${apply} --dry-run=server`]],
+        ['check-adoption', ['helm', check, `${adopt} --dry-run=server`]],
+        ['apply', ['helm', check, `${apply} --dry-run=server`, apply, ...wait, 'afterReady']],
+        ['adopt', ['helm', check, `${adopt} --dry-run=server`, adopt,
+            `${apply} --dry-run=server`, apply, ...wait, 'afterReady']]
     ]) {
-        it(`performs only the requested operations for ${  action}`, () => {
+        it(`performs only the requested operations for ${action}`, () => {
             const calls = [];
             const plan = { ...release(), afterReady(current, kube) {
                 assert.equal(current.context, 'lab');
@@ -50,15 +51,30 @@ describe('executeRelease', () => {
     }
 
     for (const failOn of ['secret/registry', '--dry-run=server', 'statefulset/bus']) {
-        it(`stops on a failed ${  failOn  } without follow-up mutations`, () => {
+        it(`stops on a failed ${failOn} without follow-up mutations`, () => {
             const calls = [];
             assert.throws(() => { executeRelease(release(), 'apply', record(calls, failOn)); }, /unavailable/u);
             assert(calls.at(-1).includes(failOn));
         });
     }
 
+    it('stops adoption if another manager changes a field after the SSA dry-run', () => {
+        const calls = [];
+        const run = record(calls);
+        assert.throws(() => {
+            executeRelease(release(), 'adopt', (command, args, options) => {
+                const output = run(command, args, options);
+                if (args.includes('--server-side') && !args.includes('--dry-run=server')) {
+                    throw new Error('field ownership conflict');
+                }
+                return output;
+            });
+        }, /ownership conflict/u);
+        assert.deepEqual(calls, ['helm', check, `${adopt} --dry-run=server`, adopt, `${apply} --dry-run=server`, apply]);
+    });
+
     for (const key of ['context', 'namespace', 'fieldManager']) {
-        it(`rejects an empty ${  key  } before a cluster operation`, () => {
+        it(`rejects an empty ${key} before a cluster operation`, () => {
             const plan = { ...release(), [key]: '' };
             assert.throws(() => { executeRelease(plan, 'apply', assert.fail); }, new RegExp(key, 'u'));
         });

@@ -313,6 +313,15 @@ The default storage mode uses StatefulSet claim templates.
 
 `executeRelease(plan, action)` renders the chart or runs check, diff, adopt
 and apply against the explicitly supplied Kubernetes context and namespace.
+During `adopt`, the legacy client-side manager migrates the resources first.
+The release's server-side manager then applies the same rendered manifest before
+the executor waits for the workloads. This restores declared fields that a
+legacy three-way merge can drop, such as an environment entry whose name was
+duplicated in the old last-applied annotation. Each apply gets its own server
+dry-run. `check-adoption` previews the client-side phase only. The server-side
+phase must run against the migrated state. An ownership conflict stops adoption
+before rollout waits and the afterReady hook. Resolve the field ownership and
+rerun `apply` after the client-side migration has completed.
 A caller can supply prerequisites, rollout resources and an afterReady hook.
 The RabbitMQ definitions builder and management reconciler are exported as
 `@yarkivaev/scada/rabbitmq/definitions` and `@yarkivaev/scada/rabbitmq/reconcile`.

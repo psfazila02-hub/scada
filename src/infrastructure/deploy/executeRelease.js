@@ -19,15 +19,20 @@ function kubeAt(plan, execute) {
     };
 }
 
-/** Apply only after admission succeeds, reconciling only fully rolled out resources. */
+function applyWith(kube, manifests, flags, checkOnly) {
+    const args = ['apply', ...flags, '-f', '-'];
+    kube([...args, '--dry-run=server'], manifests);
+    if (!checkOnly) { kube(args, manifests); }
+}
+
+/** Adopt legacy fields, then enforce the complete manifest before waiting for rollouts. */
 function applyRelease(plan, action, kube, manifests) {
-    const ownership = ['adopt', 'check-adoption'].includes(action)
-        ? ['--field-manager=kubectl-client-side-apply']
-        : ['--server-side', `--field-manager=${plan.fieldManager}`];
-    const apply = ['apply', ...ownership, '-f', '-'];
-    kube([...apply, '--dry-run=server'], manifests);
-    if (['check', 'check-adoption'].includes(action)) { return ''; }
-    kube(apply, manifests);
+    if (['adopt', 'check-adoption'].includes(action)) {
+        applyWith(kube, manifests, ['--field-manager=kubectl-client-side-apply'], action === 'check-adoption');
+        if (action === 'check-adoption') { return ''; }
+    }
+    applyWith(kube, manifests, ['--server-side', `--field-manager=${plan.fieldManager}`], action === 'check');
+    if (action === 'check') { return ''; }
     for (const workload of plan.workloads || []) {
         kube(['rollout', 'status', workload, '--timeout=300s']);
     }
