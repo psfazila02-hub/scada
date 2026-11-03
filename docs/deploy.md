@@ -2,7 +2,7 @@
 
 Two levels.
 
-The **system document** is one file for the whole plant: every machine, every server, every app. A plant package stores that file and does not project it itself. `readDocument(text)` parses the YAML subset the document uses: maps, lists, and scalars. A second file may overlay a contour: `mergeDocuments(catalog, contour)` keeps omitted catalog keys, replaces listed servers, and deep-merges profiles. A `null` app drops that app.
+The **system document** names every machine, server, and app. A plant package stores that file and does not project it itself. `readDocument(text, load)` parses the YAML subset: maps, lists, and scalars. `include` lists other yaml files the reader loads through `load`. Those files merge in: maps and namespace trees combine, listed servers replace, profiles deep-merge, and a `null` app drops that app.
 
 A **release** is one Helm install of `charts/scada` into one cluster. `releases(document, cluster)` cuts the system document down to the values of that cluster. One release never describes a second cluster.
 

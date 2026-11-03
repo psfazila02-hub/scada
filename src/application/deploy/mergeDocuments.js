@@ -37,10 +37,42 @@ function mergeMaps(left, right) {
 }
 
 /**
+ * Merges namespace trees by node id.
+ *
+ * @param {object[]|undefined} left - base nodes
+ * @param {object[]|undefined} right - overlay nodes
+ * @returns {object[]} merged nodes
+ * @example
+ *   mergeNodes([{ id: 'mill', nodes: [{ id: 'a' }] }], [{ id: 'mill', nodes: [{ id: 'b' }] }]);
+ */
+function mergeNodes(left, right) {
+    const value = new Map();
+    (left || []).forEach((node) => {
+        value.set(node.id, node);
+    });
+    (right || []).forEach((node) => {
+        const prior = value.get(node.id);
+        if (!prior) {
+            value.set(node.id, node);
+            return;
+        }
+        const next = { ...prior, ...node };
+        const nodes = mergeNodes(prior.nodes, node.nodes);
+        if (nodes.length > 0) {
+            next.nodes = nodes;
+        } else {
+            delete next.nodes;
+        }
+        value.set(node.id, next);
+    });
+    return Array.from(value.values());
+}
+
+/**
  * Overlays one system document on another.
  *
- * Listed top-level keys replace. `profiles` deep-merges. A `null` app
- * drops that app. Omitted keys stay from the catalog.
+ * Maps and namespace trees merge. Listed servers replace. A `null`
+ * app drops that app. Omitted keys stay from the catalog.
  *
  * @param {object} base - catalog document
  * @param {object} extra - contour overlay
@@ -50,8 +82,17 @@ function mergeMaps(left, right) {
  */
 export default function mergeDocuments(base, extra) {
     const document = { ...base, ...extra };
+    if (base.templates || extra.templates) {
+        document.templates = { ...(base.templates || {}), ...(extra.templates || {}) };
+    }
+    if (base.mappings || extra.mappings) {
+        document.mappings = mergeMaps(base.mappings, extra.mappings);
+    }
     if (base.profiles || extra.profiles) {
         document.profiles = mergeMaps(base.profiles, extra.profiles);
+    }
+    if (base.namespace || extra.namespace) {
+        document.namespace = mergeNodes(base.namespace, extra.namespace);
     }
     return document;
 }

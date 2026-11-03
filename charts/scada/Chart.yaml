@@ -3,4 +3,4 @@ name: scada
 description: Generic SCADA site — site-server, supervisor-sink, collectors, Postgres, RabbitMQ, optional ClickHouse
 type: application
 version: 0.2.1
-appVersion: "2.3.111"
+appVersion: "2.3.112"

@@ -45,4 +45,22 @@ describe('readDocument', function() {
         ].join('\n'));
         assert.strictEqual(document.servers[0].api, api, 'readDocument truncated the site API');
     });
+
+    it('loads an included mapping before the contour', function() {
+        const signal = `s${Math.random().toString(36).slice(2, 7)}\u00e9`;
+        const files = {
+            'maps.yaml': ['mappings:', '  drive:', `    voltage: ${signal}`].join('\n')
+        };
+        const document = readDocument(
+            ['include:', '  - maps.yaml', 'servers:', '  - id: lab'].join('\n'),
+            (name) => {
+                return files[name];
+            }
+        );
+        assert.strictEqual(
+            document.mappings.drive.voltage,
+            signal,
+            'readDocument dropped an included mapping'
+        );
+    });
 });

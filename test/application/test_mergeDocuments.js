@@ -57,4 +57,20 @@ describe('mergeDocuments', function() {
             'mergeDocuments kept a null app or dropped the secret'
         );
     });
+
+    it('keeps namespace children from both sides', function() {
+        const first = token();
+        const second = token();
+        const merged = mergeDocuments(
+            { namespace: [{ id: 'mill', nodes: [{ id: first }] }] },
+            { namespace: [{ id: 'mill', nodes: [{ id: second }] }] }
+        );
+        assert.deepStrictEqual(
+            merged.namespace[0].nodes.map((node) => {
+                return node.id;
+            }),
+            [first, second],
+            'mergeDocuments dropped a namespace child'
+        );
+    });
 });

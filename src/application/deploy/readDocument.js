@@ -1,3 +1,5 @@
+import applyIncludes from './applyIncludes.js';
+
 /**
  * Parses one scalar token.
  *
@@ -145,15 +147,17 @@ function item(rows, index, indent) {
 }
 
 /**
- * Reads the system document subset: nested maps, lists, and scalars.
+ * Parses maps, lists, and scalars, then loads `include`.
  *
  * @example
  *   readDocument('servers:\n  - id: cell\n');
  *
  * @param {string} text - document file contents
+ * @param {Function} [load] - reader for included file names
+ * @param {string[]} [stack] - includes already being read
  * @returns {object} plain system document
  */
-export default function readDocument(text) {
+export default function readDocument(text, load, stack) {
     const rows = [];
     text.split('\n').forEach((raw) => {
         if (raw.trim() !== '' && !raw.trimStart().startsWith('#')) {
@@ -161,5 +165,5 @@ export default function readDocument(text) {
             rows.push({ indent, body: raw.slice(indent) });
         }
     });
-    return block(rows, 0).value;
+    return applyIncludes(block(rows, 0).value, load, stack || [], readDocument);
 }
