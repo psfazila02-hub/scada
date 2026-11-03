@@ -421,9 +421,9 @@ describe('scada chart', function() {
         );
     });
 
-    it('keeps collectors apart when the serial devices differ', function() {
-        const left = `/dev/ttyS${Math.floor(Math.random() * 4)}`;
-        const right = `/dev/ttyS${4 + Math.floor(Math.random() * 4)}`;
+    it('shares one collector across fan-in that use the same command', function() {
+        const left = `modbus://192.0.2.${10 + Math.floor(Math.random() * 20)}:502`;
+        const right = `modbus://192.0.2.${40 + Math.floor(Math.random() * 20)}:502`;
         const rendered = render([
             'image: example.invalid/scada:1',
             'collectors:',
@@ -435,9 +435,30 @@ describe('scada chart', function() {
             '    path: bay/right'
         ].join('\n'));
         assert.strictEqual(
+            collectorNames(rendered).length === 1
+                && JSON.stringify(envOf(rendered, 'ADDRESS')) === JSON.stringify([left, right]),
+            true,
+            'fan-in with one command did not share a collector'
+        );
+    });
+
+    it('keeps collectors apart when the commands differ', function() {
+        const left = `/dev/ttyS${Math.floor(Math.random() * 4)}`;
+        const right = `/dev/ttyS${4 + Math.floor(Math.random() * 4)}`;
+        const rendered = render([
+            'image: example.invalid/scada:1',
+            'collectors:',
+            '  - command: ["node", "bin/one.js"]',
+            `    address: "${left}"`,
+            '    path: bay/left',
+            '  - command: ["node", "bin/two.js"]',
+            `    address: "${right}"`,
+            '    path: bay/right'
+        ].join('\n'));
+        assert.strictEqual(
             collectorNames(rendered).length,
             2,
-            'different serial devices collapsed into one collector'
+            'different commands collapsed into one collector'
         );
     });
 

@@ -254,7 +254,7 @@ helm upgrade --install cell-a charts/scada \
   -f cell-a.yaml
 ```
 
-`image` is required on the release. The release name becomes the DNS prefix: `cell-a-site-server`, `cell-a-supervisor-sink`, `cell-a-postgres`, `cell-a-rabbitmq`, `cell-a-clickhouse`, and `cell-a-collector-<device>` when collectors are set. The file passed to Helm is the release values below, not the system document.
+`image` is required on the release. The release name becomes the DNS prefix: `cell-a-site-server`, `cell-a-supervisor-sink`, `cell-a-postgres`, `cell-a-rabbitmq`, `cell-a-clickhouse`, and `cell-a-collector-<command>` when collectors are set. The file passed to Helm is the release values below, not the system document.
 
 ## Values
 
@@ -270,10 +270,10 @@ The chart always installs supervisor-sink from `image`. Its command is fixed. `c
 | `role` | `edge` | `SINK_DB_PROFILE` on site-server and supervisor-sink. The system document does not set it |
 | `machines` | `[]` | `EDGE_MACHINES` JSON on site-server, omitted when empty |
 | `sites` | `[]` | `EDGE_SITES` JSON on site-server, omitted when empty |
-| `collectors` | `[]` | one collector Deployment per device. Empty installs none |
-| `collectors[].address` | required | device address. The Deployment env `ADDRESS` is a JSON array of the addresses on that device |
+| `collectors` | `[]` | one collector Deployment per command. Empty installs none |
+| `collectors[].address` | required | device address. The Deployment env `ADDRESS` is a JSON array of every address that command reads |
 | `collectors[].path` | required | document path. The Deployment env `STREAM` is a JSON array of those paths. Each path is a telemetry ingest routing key |
-| `collectors[].command` | required | collector argv. Every entry on one device must use the same command |
+| `collectors[].command` | required | collector argv. Entries that share this argv share one Deployment |
 | `collectors[].mapping` | `{}` | point map. The Deployment env `MAPPING` is a JSON array of those maps, aligned with `STREAM` and `ADDRESS` |
 | `bus` | `[]` | list of bus entries, concatenated with `buses`. Omitted from the default file |
 | `buses` | `[]` | same list as `bus`. Omitted from the default file |
@@ -294,7 +294,7 @@ The chart always installs supervisor-sink from `image`. Its command is fixed. `c
 
 A collector entry needs `address`, `path`, and `command`. `mapping` may be omitted.
 
-The chart groups entries by device. The device is a `/dev/tty` path found in `address` when one is present. Otherwise the device is the whole `address`. One device is one Deployment. Two commands on one device fail the render. A device under `/dev/` is mounted from the host and the container is privileged. The Deployment name is `<release>-collector-<slug>`. The slug is the device in lowercase, with runs outside `[A-Za-z0-9]` replaced by `-`.
+The chart groups entries by `command`. One command is one Deployment. Two commands that name the same `/dev/` address fail the render. Every `/dev/` address in the group is mounted from the host and the container is privileged. The Deployment name is `<release>-collector-<slug>`. The slug is the last argv word in lowercase, with runs outside `[A-Za-z0-9]` replaced by `-`.
 
 `ADDRESS`, `STREAM`, and `MAPPING` are JSON arrays in entry order. When `rabbitmq.enabled` is true each collector also gets `MQTT_URL` `mqtt://<release>-rabbitmq:1883`. A collector `path` is an ingest key only. It does not open the outbox.
 
