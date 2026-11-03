@@ -10,13 +10,12 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: supervisor-sink
-      app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- include "scada.match" (dict "app" "supervisor-sink" "ctx" .) | nindent 6 }}
   template:
     metadata:
       labels:
         {{- include "scada.labels" . | nindent 8 }}
-        app: supervisor-sink
+        {{- include "scada.match" (dict "app" "supervisor-sink" "ctx" .) | nindent 8 }}
     spec:
       {{- with .Values.pullSecret }}
       imagePullSecrets:
@@ -60,5 +59,4 @@ spec:
       port: {{ .Values.service.internalPort }}
       targetPort: state
   selector:
-    app: supervisor-sink
-    app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- include "scada.match" (dict "app" "supervisor-sink" "ctx" .) | nindent 4 }}

@@ -286,10 +286,18 @@ The chart always installs supervisor-sink from `image`. Its command is fixed. `c
 | `postgres.secret` | `scada-postgres` | Secret name |
 | `postgres.database` | `scada` | `POSTGRES_DB` |
 | `postgres.image` | `postgres:16` | Postgres image |
+| `postgres.storage` | `10Gi` | Postgres volume claim |
+| `postgres.storageClass` | empty | omitted when empty |
 | `rabbitmq.enabled` | `true` | in-cluster RabbitMQ, STOMP and AMQP env, collector `MQTT_URL`, and the topology below |
 | `rabbitmq.image` | `rabbitmq:3.13-management` | broker image |
+| `rabbitmq.storage` | `5Gi` | RabbitMQ volume claim |
+| `rabbitmq.storageClass` | empty | omitted when empty |
+| `rabbitmq.service.type` | `ClusterIP` | broker Service type |
 | `clickhouse.enabled` | `false` | in-cluster ClickHouse, `CLICKHOUSE_HOST`, and `CLICKHOUSE_URL` |
 | `clickhouse.image` | `clickhouse/clickhouse-server:24.8` | ClickHouse image |
+| `clickhouse.storage` | `20Gi` | ClickHouse volume claim |
+| `clickhouse.storageClass` | empty | omitted when empty |
+| `extraLabels` | `{}` | extra selector and metadata labels. The selector does not use `app.kubernetes.io/instance` |
 | `resources` | small requests and limits | container resources on site-server, supervisor-sink, and collectors |
 
 A collector entry needs `address`, `path`, and `command`. `mapping` may be omitted.
@@ -417,3 +425,18 @@ Prefer Secret references over literal URLs when the values file is stored in git
 This chart does not create the Kubernetes cluster, choose how many nodes it has, or install ingress, storage class, or a remote shovel. Another app is a key under `apps` with its own `chart` and `values`. `releases` hands those values through. This chart does not render them.
 
 The running site process still selects one migration set with `SINK_DB_PROFILE`. This document can describe a server that both sends and receives, and `releases` emits both `machines` and `sites` for it. The process does not yet apply two migration sets on that server. Several servers may own one object. The process does not yet choose which member of that set serves a request.
+
+### Adopting existing Kubernetes resources
+
+Before a first Helm adoption, compare the rendered manifest against live resources,
+including container environment variables and volume mounts. Kubernetes merges
+these lists by name or mount path. Switching an environment variable from `value`
+to `valueFrom` requires explicitly removing the old `value`; otherwise StatefulSets
+may accept a template that cannot create a valid Pod. Switching from a directory
+mount to individual files also requires removing the old directory mount.
+
+Keep RabbitMQ configuration as three individual ConfigMap `subPath` mounts.
+For namespaces without surge quota, set the adopted Deployments' rolling update
+strategy to `maxSurge: 0`, `maxUnavailable: 1` before rollout. Preserve existing
+PVCs and immutable selectors. Back up the live specs and use an explicit context
+and namespace for each operation.

@@ -6,6 +6,7 @@ machines: []
 sites: []
 collectors: []
 env: []
+extraLabels: {}
 service:
   port: 3000
   internalPort: 8081
@@ -15,12 +16,21 @@ postgres:
   image: postgres:16
   secret: scada-postgres
   database: scada
+  storage: 10Gi
+  storageClass: ""
+  data: /var/lib/postgresql/data/pgdata
 rabbitmq:
   enabled: true
   image: rabbitmq:3.13-management
+  storage: 5Gi
+  storageClass: ""
+  service:
+    type: ClusterIP
 clickhouse:
   enabled: false
   image: clickhouse/clickhouse-server:24.8
+  storage: 20Gi
+  storageClass: ""
 resources:
   requests:
     cpu: 100m
