@@ -254,33 +254,63 @@ helm upgrade --install cell-a charts/scada \
   -f cell-a.yaml
 ```
 
-`image` is required on the release. The release name becomes the DNS prefix: `cell-a-site-server`, `cell-a-postgres`, `cell-a-rabbitmq`, `cell-a-clickhouse`. The file passed to Helm is the release values below, not the system document.
+`image` is required on the release. The release name becomes the DNS prefix: `cell-a-site-server`, `cell-a-supervisor-sink`, `cell-a-postgres`, `cell-a-rabbitmq`, `cell-a-clickhouse`, and `cell-a-collector-<device>` when collectors are set. The file passed to Helm is the release values below, not the system document.
 
 ## Values
 
-These names are the chart binding. A profile does not use them. `releases` writes them from the modules above.
+These names are the chart binding. A profile does not use them. `releases` writes the projection above. The chart also reads `collectors`, `bus`, and `buses` from the values file.
+
+The chart always installs supervisor-sink from `image`. Its command is fixed. `command` is the site-server argv. A collector uses `collectors[].command`.
 
 | Field | Default | Becomes |
 |---|---|---|
-| `image` | empty, required | site-server image |
-| `command` | image entrypoint | container command, for example `["node", "bin/edge-site.js"]` |
-| `pullSecret` | none | `imagePullSecrets` name |
-| `role` | `edge` | `SINK_DB_PROFILE` on the current process. The system document does not set it |
-| `machines` | `[]` | `EDGE_MACHINES` JSON, omitted when empty |
-| `sites` | `[]` | `EDGE_SITES` JSON, omitted when empty |
+| `image` | empty, required | image of site-server, supervisor-sink, and each collector |
+| `command` | image entrypoint | site-server argv, for example `["node", "bin/edge-site.js"]`. Omitted when empty |
+| `pullSecret` | none | `imagePullSecrets` name on site-server, supervisor-sink, and collectors |
+| `role` | `edge` | `SINK_DB_PROFILE` on site-server and supervisor-sink. The system document does not set it |
+| `machines` | `[]` | `EDGE_MACHINES` JSON on site-server, omitted when empty |
+| `sites` | `[]` | `EDGE_SITES` JSON on site-server, omitted when empty |
+| `collectors` | `[]` | one collector Deployment per device. Empty installs none |
+| `collectors[].address` | required | device address. The Deployment env `ADDRESS` is a JSON array of the addresses on that device |
+| `collectors[].path` | required | document path. The Deployment env `STREAM` is a JSON array of those paths. Each path is a telemetry ingest routing key |
+| `collectors[].command` | required | collector argv. Every entry on one device must use the same command |
+| `collectors[].mapping` | `{}` | point map. The Deployment env `MAPPING` is a JSON array of those maps, aligned with `STREAM` and `ADDRESS` |
+| `bus` | `[]` | list of bus entries, concatenated with `buses`. Omitted from the default file |
+| `buses` | `[]` | same list as `bus`. Omitted from the default file |
+| `bus[].names` | `[]` | document paths. Each name is a telemetry ingest key and an outbox key. `buses[].names` is the same field |
 | `env` | `[]` | extra `{ name, value }` pairs on the site-server container |
-| `service.port` | `3000` | plant API, `PORT` |
-| `service.internalPort` | `8081` | edge HTTP, `STATE_HTTP_PORT` |
+| `service.port` | `3000` | plant API, `PORT`, and the site-server Service port |
+| `service.internalPort` | `8081` | `STATE_HTTP_PORT` on site-server and supervisor-sink |
 | `service.nodePort` | `0` | when greater than zero, a NodePort Service `*-site-server-plant-lan` |
 | `postgres.enabled` | `true` | in-cluster Postgres. When false, bring your own URL via `env` |
 | `postgres.secret` | `scada-postgres` | Secret name |
 | `postgres.database` | `scada` | `POSTGRES_DB` |
 | `postgres.image` | `postgres:16` | Postgres image |
-| `rabbitmq.enabled` | `true` | in-cluster RabbitMQ with the ingest topology below |
+| `rabbitmq.enabled` | `true` | in-cluster RabbitMQ, STOMP and AMQP env, collector `MQTT_URL`, and the topology below |
 | `rabbitmq.image` | `rabbitmq:3.13-management` | broker image |
-| `clickhouse.enabled` | `false` | in-cluster ClickHouse and `CLICKHOUSE_URL` |
+| `clickhouse.enabled` | `false` | in-cluster ClickHouse, `CLICKHOUSE_HOST`, and `CLICKHOUSE_URL` |
 | `clickhouse.image` | `clickhouse/clickhouse-server:24.8` | ClickHouse image |
-| `resources` | small requests and limits | site-server resources |
+| `resources` | small requests and limits | container resources on site-server, supervisor-sink, and collectors |
+
+A collector entry needs `address`, `path`, and `command`. `mapping` may be omitted.
+
+The chart groups entries by device. The device is a `/dev/tty` path found in `address` when one is present. Otherwise the device is the whole `address`. One device is one Deployment. Two commands on one device fail the render. A device under `/dev/` is mounted from the host and the container is privileged. The Deployment name is `<release>-collector-<slug>`. The slug is the device in lowercase, with runs outside `[A-Za-z0-9]` replaced by `-`.
+
+`ADDRESS`, `STREAM`, and `MAPPING` are JSON arrays in entry order. When `rabbitmq.enabled` is true each collector also gets `MQTT_URL` `mqtt://<release>-rabbitmq:1883`. A collector `path` is an ingest key only. It does not open the outbox.
+
+`bus` and `buses` are concatenated. The chart reads `names` on each entry. A name is an ingest key and a binding on `scada.telemetry.outbox`. The chart does not read `url` or `cluster`.
+
+```yaml
+collectors:
+  - command: ["node", "bin/modbus-to-mqtt.js"]
+    address: "modbus:///dev/ttyUSB0?unit=1"
+    path: mill/hall/unit-1/electrical
+    mapping:
+      voltage: holding:40001
+buses:
+  - names:
+      - mill/hall/unit-1/*
+```
 
 `machines` entries are opaque objects. The chart does not interpret them. A plant process that reads `EDGE_MACHINES` typically wants:
 
@@ -307,10 +337,10 @@ Do not put passwords in the values file. Postgres reads Secret `postgres.secret`
 |---|---|
 | `user` | `POSTGRES_USER` on the database pod |
 | `password` | `POSTGRES_PASSWORD` on the database pod |
-| `url` | `POSTGRES_URL` on site-server |
-| `adminUrl` | `POSTGRES_ADMIN_URL` on site-server, used to run migrations |
+| `url` | `POSTGRES_URL` on site-server and supervisor-sink |
+| `adminUrl` | `POSTGRES_ADMIN_URL` on site-server and supervisor-sink, used to run migrations |
 
-The chart's own RabbitMQ definitions create user `guest` / `guest` and point `STOMP_URL` and `AMQP_URL` at that broker. Replace the broker (`rabbitmq.enabled: false` plus your own `env`) when that default is not acceptable.
+The chart's own RabbitMQ definitions create user `guest` / `guest` and point `STOMP_URL` and `AMQP_URL` at that broker. When the broker is enabled, collectors get `MQTT_URL` on the same Service. Replace the broker (`rabbitmq.enabled: false` plus your own `env`) when that default is not acceptable.
 
 ## What a profile installs
 
@@ -320,7 +350,9 @@ Empty `machines` omits `EDGE_MACHINES`. Empty `sites` omits `EDGE_SITES`. A proc
 
 ## Broker topology
 
-When `rabbitmq.enabled` is true the chart loads definitions for topic exchanges `scada.alerts`, `scada.segments`, `scada.telemetry`, `scada.operations`, `scada.user_decisions`, and durable queues `scada.segments.ingest`, `scada.telemetry.ingest`, `scada.operations.ingest`, `scada.user_decisions`. Each queue is bound to its exchange with routing key `#`. Plugins: STOMP and management. AMQP is `:5672`, STOMP is `:61613`.
+When `rabbitmq.enabled` is true the chart loads definitions for topic exchanges `scada.alerts`, `scada.segments`, `scada.telemetry`, `scada.operations`, `scada.user_decisions`, and durable queues `scada.segments.ingest`, `scada.telemetry.ingest`, `scada.operations.ingest`, `scada.user_decisions`. Segments, operations, and decisions are bound with routing key `#`. Telemetry ingest keys are the collector paths and the `bus` and `buses` names. With none of those, the ingest binding is `#`. A `bus` or `buses` name also creates `scada.telemetry.outbox` and binds that name there. Plugins: STOMP, MQTT, and management. AMQP is `:5672`, MQTT is `:1883`, STOMP is `:61613`. MQTT allows anonymous clients on vhost `/` and uses exchange `scada.telemetry`.
+
+A routing key replaces `/` with `.`. The path `*` is `#`. A path that ends in `/*` is that prefix plus `.#`.
 
 ## Release values
 
