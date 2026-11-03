@@ -286,3 +286,44 @@ The scada chart declares the queue and applies an ingest-only dead-letter policy
 without changing existing queue arguments. The profile `env` is passed to both
 site-server and supervisor-sink. DLQ records retain the original body and RabbitMQ
 `x-death` metadata for inspection and deliberate replay; they are not auto-expired.
+
+### Deploy a node with named processes
+
+A profile can expose deployment coordinates in `target`, set
+`apps.scada.site.enabled` and `apps.scada.sink.enabled` independently, and
+provide RabbitMQ chart settings in `modules.message_bus.chart`. The
+`releases(document, cluster)` projection returns the target and chart values.
+The default profile still renders the existing site and sink.
+
+`subscriptions(expandedDocument, sourceId)` returns the outgoing server
+subscriptions as `{ from, to, name, api? }`. It combines sender `fan_out` and
+receiver `fan_in` declarations, keeping each expanded stream path and any
+explicit service selected by the receiver. Declaring the same subscription on
+both sides produces a single row.
+
+Use `collectorProcesses(machines, describe, project)` to derive workloads from
+the selected server's source rows. For each row, `describe(row)` returns a
+process name, command and optional environment and resources. Rows with the
+same name must describe the same process. `project(descriptor, rows)` converts
+its sources into adapter-specific environment variables and host devices. Process
+order follows the first occurrence of each name in the source rows.
+The packaged `charts/scada` chart renders the resulting `processes` as
+named Deployments. A configured broker claim name selects a standalone PVC.
+The default storage mode uses StatefulSet claim templates.
+
+`executeRelease(plan, action)` renders the chart or runs check, diff, adopt
+and apply against the explicitly supplied Kubernetes context and namespace.
+During `adopt`, the legacy client-side manager migrates the resources first.
+The release's server-side manager then applies the same rendered manifest before
+the executor waits for the workloads. This restores declared fields that a
+legacy three-way merge can drop, such as an environment entry whose name was
+duplicated in the old last-applied annotation. Each apply gets its own server
+dry-run. `check-adoption` previews the client-side phase only. The server-side
+phase must run against the migrated state. An ownership conflict stops adoption
+before rollout waits and the afterReady hook. Resolve the field ownership and
+rerun `apply` after the client-side migration has completed.
+A caller can supply prerequisites, rollout resources and an afterReady hook.
+The RabbitMQ definitions builder and management reconciler are exported as
+`@yarkivaev/scada/rabbitmq/definitions` and `@yarkivaev/scada/rabbitmq/reconcile`.
+The caller supplies the vhost, connection settings and ownership policy for
+retired routes. Reconciliation retains stored queues.

@@ -1,7 +1,8 @@
+{{- if .Values.site.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-site-server
+  name: {{ include "scada.prefix" . }}-site-server
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "scada.labels" . | nindent 4 }}
@@ -70,7 +71,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-site-server
+  name: {{ include "scada.prefix" . }}-site-server
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "scada.labels" . | nindent 4 }}
@@ -90,7 +91,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-site-server-plant-lan
+  name: {{ include "scada.prefix" . }}-site-server-plant-lan
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "scada.labels" . | nindent 4 }}
@@ -104,4 +105,5 @@ spec:
       nodePort: {{ .Values.service.nodePort }}
   selector:
     {{- include "scada.match" (dict "app" "site-server" "ctx" .) | nindent 4 }}
+{{- end }}
 {{- end }}

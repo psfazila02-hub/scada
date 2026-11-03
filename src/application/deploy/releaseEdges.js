@@ -1,3 +1,4 @@
+import { publishedNames } from './publishedStreams.js';
 import { isAddress } from './expandPattern.js';
 import { asPath, objectPath, serverById } from './releaseNodes.js';
 
@@ -28,28 +29,22 @@ function sameObjects(left, right) {
  *   remember([], { from: 'cell', object: 'unit', side: 'out', to: 'archive' });
  */
 function remember(edges, edge) {
-    const found = edges.find((item) => {
+    let found = edges.find((item) => {
         return item.from === edge.from && item.to === edge.to;
     });
     if (!found) {
-        edges.push({
-            api: edge.api,
-            from: edge.from,
-            objects: [edge.object],
-            sides: { [edge.side]: [edge.object] },
-            to: edge.to
-        });
-        return;
+        found = { from: edge.from, to: edge.to, sides: {}, streams: new Map() };
+        edges.push(found);
     }
-    const prior = found.sides[edge.side] ? found.sides[edge.side].slice() : [];
-    if (!prior.includes(edge.object)) {
-        prior.push(edge.object);
-    }
-    found.sides[edge.side] = prior;
-    found.objects = (found.sides.out || found.sides.in).slice();
+    found.sides[edge.side] ||= [];
+    const objects = found.sides[edge.side];
+    if (!objects.includes(edge.object)) { objects.push(edge.object); }
+    const services = found.streams.get(edge.name) || new Set();
     if (edge.api) {
+        services.add(edge.api);
         found.api = edge.api;
     }
+    found.streams.set(edge.name, services);
 }
 
 /**
@@ -67,6 +62,7 @@ export function edgesOf(document) {
             const dest = serverById(document, flow.to);
             remember(edges, {
                 from: server.id,
+                name: flow.name,
                 object: objectPath(server, flow.name),
                 side: 'out',
                 to: dest.id
@@ -80,6 +76,7 @@ export function edgesOf(document) {
             remember(edges, {
                 api: flow.api,
                 from: source.id,
+                name: flow.name,
                 object: objectPath(source, flow.name),
                 side: 'in',
                 to: server.id
@@ -119,7 +116,7 @@ function covers(held, objectId) {
  *   direct({ fan_in: [], id: 'cell' });
  */
 function direct(server) {
-    const names = [];
+    const names = publishedNames(server);
     (server.fan_in || []).forEach((flow) => {
         if (isAddress(flow.from)) {
             names.push(flow.name);

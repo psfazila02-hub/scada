@@ -2,5 +2,5 @@ apiVersion: v2
 name: scada
 description: Generic SCADA site — site-server, supervisor-sink, collectors, Postgres, RabbitMQ, optional ClickHouse
 type: application
-version: 0.2.4
-appVersion: "2.3.114"
+version: 0.3.0
+appVersion: "2.3.115"

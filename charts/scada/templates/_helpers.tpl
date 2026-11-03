@@ -1,3 +1,7 @@
+{{- define "scada.prefix" -}}
+{{- default .Release.Name .Values.prefix -}}
+{{- end }}
+
 {{- define "scada.labels" -}}
 app.kubernetes.io/name: scada
 app.kubernetes.io/instance: {{ .Release.Name }}
@@ -69,7 +73,7 @@ volumeMode: Filesystem
 {{- end }}
 {{- if .Values.rabbitmq.enabled }}
 - name: STOMP_URL
-  value: {{ printf "stomp://%s-rabbitmq:61613" .Release.Name | quote }}
+  value: {{ printf "stomp://%s-rabbitmq:61613" (include "scada.prefix" .) | quote }}
 - name: STOMP_LOGIN
   value: guest
 - name: STOMP_PASSCODE
@@ -77,12 +81,16 @@ volumeMode: Filesystem
 - name: STOMP_HOST
   value: /
 - name: AMQP_URL
-  value: {{ printf "amqp://guest:guest@%s-rabbitmq:5672" .Release.Name | quote }}
+  value: {{ printf "amqp://guest:guest@%s-rabbitmq:5672" (include "scada.prefix" .) | quote }}
 {{- end }}
 {{- if .Values.clickhouse.enabled }}
 - name: CLICKHOUSE_HOST
-  value: {{ printf "%s-clickhouse" .Release.Name | quote }}
+  value: {{ printf "%s-clickhouse" (include "scada.prefix" .) | quote }}
 - name: CLICKHOUSE_URL
-  value: {{ printf "http://%s-clickhouse:8123" .Release.Name | quote }}
+  value: {{ printf "http://%s-clickhouse:8123" (include "scada.prefix" .) | quote }}
 {{- end }}
+{{- end }}
+
+{{- define "scada.brokerConfigName" -}}
+{{- default (printf "%s-rabbitmq" (include "scada.prefix" .)) .Values.rabbitmq.configName -}}
 {{- end }}

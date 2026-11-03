@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}-postgres
+  name: {{ include "scada.prefix" . }}-postgres
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "scada.labels" . | nindent 4 }}
@@ -18,13 +18,13 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ .Release.Name }}-postgres
+  name: {{ include "scada.prefix" . }}-postgres
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "scada.labels" . | nindent 4 }}
     app: postgres
 spec:
-  serviceName: {{ .Release.Name }}-postgres
+  serviceName: {{ include "scada.prefix" . }}-postgres
   replicas: 1
   selector:
     matchLabels:

@@ -1,0 +1,91 @@
+{{- if .Values.rabbitmq.enabled }}
+{{- $ingest := list -}}
+{{- $outgoing := list -}}
+{{- range .Values.collectors }}
+{{- if .path }}
+{{- $ingest = append $ingest (include "scada.routingKey" .path | trim) -}}
+{{- end }}
+{{- end }}
+{{- range $item := concat (.Values.buses | default (list)) (.Values.bus | default (list)) }}
+{{- range $name := ($item.names | default (list)) }}
+{{- $routed := include "scada.routingKey" $name | trim -}}
+{{- $ingest = append $ingest $routed -}}
+{{- $outgoing = append $outgoing $routed -}}
+{{- end }}
+{{- end }}
+{{- $outgoing = $outgoing | uniq -}}
+{{- if $ingest }}
+{{- $ingest = $ingest | uniq -}}
+{{- else }}
+{{- $ingest = list "#" -}}
+{{- end }}
+{{- $exchange := list
+  (dict "name" "scada.alerts" "vhost" "/" "type" "topic" "durable" true "auto_delete" false)
+  (dict "name" "scada.segments" "vhost" "/" "type" "topic" "durable" true "auto_delete" false)
+  (dict "name" "scada.telemetry" "vhost" "/" "type" "topic" "durable" true "auto_delete" false)
+  (dict "name" "scada.operations" "vhost" "/" "type" "topic" "durable" true "auto_delete" false)
+  (dict "name" "scada.user_decisions" "vhost" "/" "type" "topic" "durable" true "auto_delete" false)
+-}}
+{{- $queue := list
+  (dict "name" "scada.segments.ingest" "vhost" "/" "durable" true "auto_delete" false)
+  (dict "name" "scada.telemetry.ingest" "vhost" "/" "durable" true "auto_delete" false)
+  (dict "name" "scada.operations.ingest" "vhost" "/" "durable" true "auto_delete" false)
+  (dict "name" "scada.user_decisions" "vhost" "/" "durable" true "auto_delete" false)
+-}}
+{{- if $outgoing }}
+{{- $queue = append $queue (dict "name" "scada.telemetry.outbox" "vhost" "/" "durable" true "auto_delete" false) -}}
+{{- end }}
+{{- $policies := list -}}
+{{- with .Values.rabbitmq.deadLetter }}
+{{- $queue = append $queue (dict "name" .queue "vhost" "/" "durable" true "auto_delete" false) -}}
+{{- $policies = append $policies (dict "name" "ingest-dlq" "vhost" "/" "pattern" "^scada\\.(segments|operations|telemetry)\\.ingest$" "apply-to" "queues" "priority" 10 "definition" (dict "dead-letter-exchange" "" "dead-letter-routing-key" .queue)) -}}
+{{- end }}
+{{- $binding := list -}}
+{{- range $key := $ingest }}
+{{- $binding = append $binding (dict "source" "scada.telemetry" "vhost" "/" "destination" "scada.telemetry.ingest" "destination_type" "queue" "routing_key" $key) -}}
+{{- end }}
+{{- range $pair := (list
+  (dict "source" "scada.operations" "destination" "scada.operations.ingest")
+  (dict "source" "scada.segments" "destination" "scada.segments.ingest")
+  (dict "source" "scada.user_decisions" "destination" "scada.user_decisions")) }}
+{{- $binding = append $binding (dict "source" $pair.source "vhost" "/" "destination" $pair.destination "destination_type" "queue" "routing_key" "#") -}}
+{{- end }}
+{{- range $key := $outgoing }}
+{{- $binding = append $binding (dict "source" "scada.telemetry" "vhost" "/" "destination" "scada.telemetry.outbox" "destination_type" "queue" "routing_key" $key) -}}
+{{- end }}
+{{- $definitions := dict
+  "vhosts" (list (dict "name" "/"))
+  "users" (list (dict "name" "guest" "password" "guest" "tags" (list "administrator")))
+  "permissions" (list (dict "user" "guest" "vhost" "/" "configure" ".*" "write" ".*" "read" ".*"))
+  "exchanges" $exchange
+  "queues" $queue
+  "policies" $policies
+  "bindings" $binding
+-}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "scada.brokerConfigName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "scada.labels" . | nindent 4 }}
+    app: rabbitmq
+data:
+  enabled_plugins: |
+    [{{ join ", " .Values.rabbitmq.plugins }}].
+  rabbitmq.conf: |
+    load_definitions = /etc/rabbitmq/definitions.json
+    mqtt.listeners.tcp.default = 1883
+    mqtt.allow_anonymous = true
+    mqtt.vhost = /
+    mqtt.exchange = scada.telemetry
+    {{- range $key, $value := .Values.rabbitmq.extraConfig }}
+    {{ $key }} = {{ $value }}
+    {{- end }}
+  definitions.json: |
+{{- if ne .Values.rabbitmq.definitions nil }}
+{{ .Values.rabbitmq.definitions | toPrettyJson | nindent 4 }}
+{{- else }}
+{{ $definitions | toPrettyJson | nindent 4 }}
+{{- end }}
+{{- end }}
