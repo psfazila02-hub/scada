@@ -30,6 +30,9 @@ spec:
     matchLabels:
       {{- include "scada.match" (dict "app" "postgres" "ctx" .) | nindent 6 }}
   template:
+    {{- if .Values.postgres.podTemplate }}
+    {{- toYaml .Values.postgres.podTemplate | nindent 4 }}
+    {{- else }}
     metadata:
       labels:
         {{- include "scada.labels" . | nindent 8 }}
@@ -90,6 +93,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       {{- end }}
+  {{- end }}
   {{- if not .Values.postgres.existingClaim }}
   volumeClaimTemplates:
     - metadata:

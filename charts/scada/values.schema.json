@@ -108,6 +108,24 @@
           "metadata"
         ]
       }
+    },
+    "postgres": {
+      "type": "object",
+      "properties": {
+        "podTemplate": {
+          "type": "object",
+          "description": "Opaque PodTemplateSpec override for preserving existing storage pods during adoption; empty uses generated defaults."
+        }
+      }
+    },
+    "rabbitmq": {
+      "type": "object",
+      "properties": {
+        "podTemplate": {
+          "type": "object",
+          "description": "Opaque PodTemplateSpec override for preserving existing storage pods during adoption; empty uses generated defaults."
+        }
+      }
     }
   }
 }
