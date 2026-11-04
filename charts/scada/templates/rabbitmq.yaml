@@ -47,9 +47,14 @@ spec:
         {{- with .Values.workloadLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-      {{- if .Values.rabbitmq.rolloutOnConfigChange }}
+      {{- if or .Values.rabbitmq.rolloutOnConfigChange .Values.rabbitmq.podAnnotations }}
       annotations:
+        {{- with .Values.rabbitmq.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if .Values.rabbitmq.rolloutOnConfigChange }}
         checksum/config: {{ include (print $.Template.BasePath "/rabbitmq-config.yaml") . | sha256sum }}
+        {{- end }}
       {{- end }}
     spec:
       {{- with .Values.pullSecret }}
@@ -103,6 +108,7 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: {{ . }}
+{{- if $.Values.rabbitmq.createClaim }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -111,6 +117,7 @@ metadata:
   namespace: {{ $.Release.Namespace }}
 spec:
   {{- include "scada.claim" (dict "size" $.Values.rabbitmq.storage "class" $.Values.rabbitmq.storageClass) | nindent 2 }}
+      {{- end }}
       {{- else }}
   volumeClaimTemplates:
     - metadata:
