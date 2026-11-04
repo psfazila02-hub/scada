@@ -4,10 +4,13 @@ import applyIncludes from './applyIncludes.js';
  * Parses one scalar token.
  *
  * @param {string} text - raw scalar
- * @returns {string|number|boolean|null} scalar
+ * @returns {string|number|boolean|null|Array|object} scalar
  */
 function scalar(text) {
     const trimmed = text.trim();
+    if (trimmed === '[]' || trimmed === '{}') {
+        return trimmed === '[]' ? [] : {};
+    }
     if (trimmed === 'true') {
         return true;
     }
