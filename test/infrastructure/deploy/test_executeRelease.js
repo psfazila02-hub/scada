@@ -80,3 +80,95 @@ describe('executeRelease', () => {
         });
     }
 });
+
+function retiring() {
+    return { ...release(), retirements: ['old-one', 'old-two'].map((name) => {
+        return { workload: `deployment/edge-${name}`, selector: `app=${name}` };
+    }) };
+}
+
+function retirementRun(calls, { absent = false, pods = '', failure } = {}) {
+    const run = record(calls, failure);
+    return (command, args, options) => {
+        const result = run(command, args, options);
+        if (args.includes('--ignore-not-found')) {
+            assert.equal(options.stdio[1], 'pipe');
+            return absent ? '' : 'deployment.apps/old\n';
+        }
+        if (args.includes('pods')) {
+            assert.equal(options.stdio[1], 'pipe');
+            return pods;
+        }
+        return result;
+    };
+}
+
+describe('executeRelease retirement', () => {
+    for (const action of ['apply', 'adopt']) {
+        it(`retires both old deployments and verifies their pods before ${action}`, () => {
+            const calls = [];
+            executeRelease(retiring(), action, retirementRun(calls));
+            const firstDelete = calls.findIndex((call) => { return call.startsWith('delete '); });
+            const firstWrite = calls.findIndex((call) => { return call.startsWith('apply ') && !call.includes('dry-run'); });
+            assert(firstDelete > 0);
+            assert(calls.slice(0, firstDelete).some((call) => { return call.includes('--server-side') && call.includes('dry-run'); }));
+            if (action === 'adopt') {
+                assert(calls.slice(0, firstDelete).some((call) => { return call.includes('kubectl-client-side-apply') && call.includes('dry-run'); }));
+            }
+            for (const name of ['old-one', 'old-two']) {
+                const expected = [`get deployment/edge-${name} --ignore-not-found -o name`,
+                    `delete deployment/edge-${name} --cascade=foreground --wait=true --timeout=300s`,
+                    `get pods -l app=${name} -o name`];
+                const offset = calls.indexOf(expected[0]);
+                assert.deepEqual(calls.slice(offset, offset + 3), expected);
+                assert(offset + 2 < firstWrite);
+            }
+        });
+        for (const absent of [true, false]) {
+            it(`blocks ${action} writes when old pods remain (absent=${absent})`, () => {
+                const calls = [];
+                assert.throws(() => { return executeRelease(retiring(), action,
+                    retirementRun(calls, { absent, pods: 'pod/old-terminating\n' })); }, /pods remain/u);
+                assert(!calls.some((call) => { return call.startsWith('apply ') && !call.includes('dry-run'); }));
+            });
+        }
+        it(`allows an idempotent ${action} retry after both deployments disappeared`, () => {
+            const calls = [];
+            executeRelease(retiring(), action, retirementRun(calls, { absent: true }));
+            assert.equal(calls.filter((call) => { return call.startsWith('get pods '); }).length, 2);
+            assert(!calls.some((call) => { return call.startsWith('delete '); }));
+        });
+        for (const failure of ['--dry-run=server', 'secret/registry']) {
+            it(`does not retire on ${action} preflight failure ${failure}`, () => {
+                const calls = [];
+                assert.throws(() => { return executeRelease(retiring(), action, retirementRun(calls, { failure })); }, /unavailable/u);
+                assert(!calls.some((call) => { return call.startsWith('delete '); }));
+            });
+        }
+    }
+    it('does not delete or write when adoption SSA preflight fails after CSA preflight passes', () => {
+        const calls = [];
+        assert.throws(() => {
+            executeRelease(retiring(), 'adopt', retirementRun(calls, { failure: '--server-side' }));
+        }, /unavailable/u);
+        assert(!calls.some((call) => { return call.startsWith('delete ') || (call.startsWith('apply ') && !call.includes('dry-run')); }));
+    });
+    for (const action of ['render', 'check', 'check-adoption', 'diff']) {
+        it(`does not retire during ${action}`, () => {
+            const calls = [];
+            executeRelease(retiring(), action, retirementRun(calls));
+            assert(!calls.some((call) => { return /^(?:delete|get pods|get deployment)/u.test(call); }));
+        });
+    }
+    for (const retirement of [
+        { workload: 'deployment/reader', selector: 'app=reader' },
+        { workload: 'deployment/old-one --all', selector: 'app=old-one' },
+        { workload: 'statefulset/old-one', selector: 'app=old-one' },
+        { workload: 'deployment/old-one', selector: '' },
+        { workload: 'deployment/old-one', selector: 'app=old-one,other=wide' }
+    ]) {
+        it(`rejects unsafe retirement ${JSON.stringify(retirement)} before commands`, () => {
+            assert.throws(() => { return executeRelease({ ...release(), retirements: [retirement] }, 'apply', assert.fail); }, /retirement/u);
+        });
+    }
+});

@@ -269,6 +269,30 @@ Opaque operation `kind` strings and generic ports (`latestForMachine`, list/upse
 | Export ports `Query` / `Stream` / `Sink` / `Job` | Export jobs + destination adapters |
 | ClickHouse + PG adapters | Plant wiring (`sokolPlant` / `edgePlant`) |
 
+### Stream transport ownership
+
+`@yarkivaev/source-to-sink` owns reusable Node.js sources, sinks and transport
+lifecycle: serial input, Modbus polling,
+MQTT/STOMP messaging, AMQP consumption and confirmed publishing, and serialized
+periodic ticks. SCADA composes these primitives with generic codecs, domain ports
+and persistence adapters. Plant packages supply source mappings, payload formats,
+queries, routing and plant-specific behavior.
+
+The SCADA AMQP telemetry, MQTT relay and operation-sync pipelines use
+`amqpSource`. It acknowledges after collector acceptance, requeues failures by
+default, and avoids settling explicitly acknowledged or rejected deliveries twice.
+Shutdown cancels consumption, drains accepted work and settlements, then closes
+the channel and connection. Reconnect and restart wait for that drain.
+`durableConsume` remains a compatibility facade over the shared AMQP session.
+Collectors that batch records acknowledge acceptance into that collector; this is
+not a guarantee that a later batch has already reached persistent storage.
+
+`intervalSource` schedules operator-cache synchronization, stale-open-segment
+sweeps, silent-stream reconciliation, PostgreSQL metric streams and the shared
+ClickHouse stream hub. Polls do not overlap; metric streams await subscribers
+before advancing their cursors. HTTP keepalive timers and domain coalescing
+windows remain owned by their respective adapters and domain policies.
+
 Depend on a pinned version (`"@yarkivaev/scada": "…#v2.3.46"`), not a local path, in downstream packages.
 
 ## CI/CD
@@ -327,3 +351,47 @@ The RabbitMQ definitions builder and management reconciler are exported as
 `@yarkivaev/scada/rabbitmq/definitions` and `@yarkivaev/scada/rabbitmq/reconcile`.
 The caller supplies the vhost, connection settings and ownership policy for
 retired routes. Reconciliation retains stored queues.
+
+### Collect multiple OPC UA endpoints
+
+`@yarkivaev/scada/opcua` exports `opcuaConnections(connections, publish, options)`
+and `validateConnections(connections)`. The same entry point exports
+`opcuaSource(connections, collector, options)` for source-to-sink composition;
+the collector accepts `{ channel, value }`. SCADA owns the OPC UA runtime and
+its `node-opcua` dependency; source-to-sink contains no OPC UA implementation.
+Offline deployment planners should import
+`validateConnections` from `@yarkivaev/scada/opcua/config`; this entry point never
+loads the network library or its startup diagnostics. Each connection has a unique `url`,
+positive `publishMs` and `heartbeatMs`, and `channels` with explicit, unique
+`nodeId` values. Additional channel metadata is opaque to this library.
+
+```js
+import opcuaConnections from '@yarkivaev/scada/opcua';
+
+const collector = opcuaConnections([
+    { url: 'opc.tcp://192.0.2.10:4840', publishMs: 100, heartbeatMs: 1000,
+        channels: [{ nodeId: 'ns=1;s=temperature', topic: 'line/temperature' }] }
+], (channel, value) => publish(channel.topic, value));
+await collector.start();
+// On process shutdown:
+await collector.stop();
+```
+
+Each endpoint owns its client, session and subscription. An unavailable endpoint
+retries independently while others continue. Start schedules these workers; it
+does not wait for every server to be available. Samples are delivered only with
+Good quality, both on change and through serialized fresh heartbeat reads.
+The caller owns value conversion, routing, timestamps and destination transport.
+Options `retryMs`, `connectTimeoutMs` and `requestTimeoutMs` bound retry timing and
+network requests; `onError(error, connection)` receives connection diagnostics.
+Do not replicate a collector with the same sources to distribute load: assign
+disjoint source sets to separate instances instead.
+
+A release can replace old collectors using
+`retirements: [{ workload: 'deployment/old-reader', selector: 'app=old-reader' }]`.
+For apply/adopt, the executor validates the new manifests first, foreground-deletes
+only these explicit Deployments, and verifies that no selected old pods remain
+before applying the replacement. This trades a collection gap for no overlap.
+The caller must bind each selector to its old Deployment; no namespace-wide prune
+is performed. Render/check/diff do not delete anything. An optional process `image`
+overrides the release image, so unrelated collectors can retain their pinned runtime.

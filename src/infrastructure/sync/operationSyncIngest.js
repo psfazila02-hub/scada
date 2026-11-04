@@ -1,4 +1,4 @@
-import durableConsume from '../ingest/durableConsume.js';
+import { amqpSource } from '@yarkivaev/source-to-sink';
 import operationCodec from './operationCodec.js';
 import operationSyncSink from './operationSyncSink.js';
 
@@ -43,25 +43,13 @@ export function operationConsumer(codec, channel) {
  *   const ingest = operationSyncIngest(amqpUrl, 'scada.operations.ingest', dataAccess.operations);
  *   await ingest.start();
  */
-function subscribeOperations(queue, prefetch, codec) {
-    return async (channel) => {
-        await channel.assertQueue(queue, { durable: true });
-        channel.prefetch(prefetch);
-        const onMessage = operationConsumer(codec, channel);
-        const tag = await channel.consume(queue, onMessage, { noAck: false });
-        return tag.consumerTag;
-    };
-}
-
 export default function operationSyncIngest(amqpUrl, queue, operations, options = {}) {
     const prefetch = options.prefetch || 32;
     const sink = operationSyncSink(operations);
     const codec = operationCodec(sink);
-    const session = durableConsume(
-        amqpUrl,
-        subscribeOperations(queue, prefetch, codec),
-        options
-    );
+    const session = amqpSource(amqpUrl, queue, {
+        accept(delivery) { return acceptOperationDeliver(codec, delivery.content); }
+    }, { ...options, prefetch });
     return {
         start() {
             return session.start();

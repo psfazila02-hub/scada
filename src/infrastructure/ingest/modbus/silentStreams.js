@@ -1,4 +1,4 @@
-import { clock } from '@yarkivaev/source-to-sink';
+import { clock, intervalSource } from '@yarkivaev/source-to-sink';
 
 /**
  * Whether a stream is past the silence budget.
@@ -83,15 +83,12 @@ function gateState(config) {
         intervalSec: interval,
         sources,
         clk: config.clock || clock(),
-        delay: config.delay || ((fn, ms) => {
-            return setInterval(fn, ms);
-        }),
-        clear: config.clear || clearInterval,
+        delay: config.delay || setTimeout,
+        clear: config.clear || clearTimeout,
         lastSeen: new Map(),
         held: new Map(),
         live: new Set(),
         collector: undefined,
-        timer: undefined,
         running: false
     };
 }
@@ -119,6 +116,9 @@ export default function silentStreams(config) {
     function runPulse() {
         pulse(state);
     }
+    const ticker = intervalSource(state.intervalSec * 1000, { accept: runPulse }, {
+        schedule: state.delay, clear: state.clear
+    });
     return {
         seen(name, at = state.clk.millis()) {
             state.lastSeen.set(name, at);
@@ -134,16 +134,14 @@ export default function silentStreams(config) {
             };
         },
         start() {
+            if (state.running) { return; }
             state.running = true;
             runPulse();
-            state.timer = state.delay(runPulse, state.intervalSec * 1000);
+            void ticker.start();
         },
         stop() {
             state.running = false;
-            if (state.timer !== undefined) {
-                state.clear(state.timer);
-                state.timer = undefined;
-            }
+            void ticker.stop();
             for (const name of [...state.live]) {
                 stopOne(state, name);
             }
