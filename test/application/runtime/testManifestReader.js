@@ -23,6 +23,32 @@ describe('collector manifest reader', () => {
             assert.deepEqual(events, ['start:1', 'stop:1', 'start:2', 'stop:2', 'start:3']);
         } finally { await collector.stop(); }
     });
+    it('supplies a current status snapshot so readers can retire running tasks', async () => {
+        const events = [];
+        const snapshots = [];
+        const env = {};
+        const argv = [];
+        const collector = await runCollector({ registry: registry(events), env, argv, signals: false,
+            manifestReader(inputEnv, inputArgv, status) {
+                assert.equal(inputEnv, env);
+                assert.equal(inputArgv, argv);
+                assert.ok(status);
+                snapshots.push(status);
+                if (status.tasks.length === 0) { return document(1); }
+                return { assignments: [], removals: status.tasks.map(({ taskId, generation }) => {
+                    return { taskId, generation: generation + 1 };
+                }) };
+            } });
+        try {
+            await collector.reload();
+            assert.deepEqual(snapshots[0].tasks, []);
+            assert.equal(snapshots[1].tasks[0].taskId, 'one');
+            assert.equal(snapshots[1].tasks[0].generation, 1);
+            assert.equal(snapshots[1].tasks[0].state, 'running');
+            assert.deepEqual(events, ['start:1', 'stop:1']);
+            assert.equal(collector.runtime.status().tasks[0].state, 'stopped');
+        } finally { await collector.stop(); }
+    });
     it('preserves a running task on invalid manifests and permits the next reload', async () => {
         const events = [];
         const invalid = document(2);
