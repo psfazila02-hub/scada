@@ -120,4 +120,24 @@ describe('clickhouseStreamHub', function() {
         sub.cancel();
         assert.strictEqual(got, 7.25, 'callback did not receive batched row value');
     });
+    it('awaits subscriber acceptance before completing a poll', async function() {
+        let release;
+        const connection = {
+            url() { return 'http://hub-await'; },
+            query() { return Promise.resolve([{ topic: 'topic', ts: '2024-06-01 10:00:00.250', value: 7 }]); }
+        };
+        const hub = createClickhouseStreamHub(connection, () => { return () => {}; });
+        const sub = hub.watch('topic', new Date('2024-06-01T10:00:00Z'), 1000, () => {
+            return new Promise((resolve) => { release = resolve; });
+        }, {});
+        let finished = false;
+        const pending = hub.pulse(1000).then(() => { finished = true; });
+        await new Promise((resolve) => { setImmediate(resolve); });
+        const observed = finished;
+        release();
+        await pending;
+        sub.cancel();
+        assert.strictEqual(observed, false);
+    });
+
 });

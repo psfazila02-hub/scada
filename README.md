@@ -269,6 +269,30 @@ Opaque operation `kind` strings and generic ports (`latestForMachine`, list/upse
 | Export ports `Query` / `Stream` / `Sink` / `Job` | Export jobs + destination adapters |
 | ClickHouse + PG adapters | Plant wiring (`sokolPlant` / `edgePlant`) |
 
+### Stream transport ownership
+
+`@yarkivaev/source-to-sink` owns reusable Node.js sources, sinks and transport
+lifecycle: OPC UA subscriptions and heartbeat reads, serial input, Modbus polling,
+MQTT/STOMP messaging, AMQP consumption and confirmed publishing, and serialized
+periodic ticks. SCADA composes these primitives with generic codecs, domain ports
+and persistence adapters. Plant packages supply source mappings, payload formats,
+queries, routing and plant-specific behavior.
+
+The SCADA AMQP telemetry, MQTT relay and operation-sync pipelines use
+`amqpSource`. It acknowledges after collector acceptance, requeues failures by
+default, and avoids settling explicitly acknowledged or rejected deliveries twice.
+Shutdown cancels consumption, drains accepted work and settlements, then closes
+the channel and connection. Reconnect and restart wait for that drain.
+`durableConsume` remains a compatibility facade over the shared AMQP session.
+Collectors that batch records acknowledge acceptance into that collector; this is
+not a guarantee that a later batch has already reached persistent storage.
+
+`intervalSource` schedules operator-cache synchronization, stale-open-segment
+sweeps, silent-stream reconciliation, PostgreSQL metric streams and the shared
+ClickHouse stream hub. Polls do not overlap; metric streams await subscribers
+before advancing their cursors. HTTP keepalive timers and domain coalescing
+windows remain owned by their respective adapters and domain policies.
+
 Depend on a pinned version (`"@yarkivaev/scada": "…#v2.3.46"`), not a local path, in downstream packages.
 
 ## CI/CD
@@ -331,7 +355,10 @@ retired routes. Reconciliation retains stored queues.
 ### Collect multiple OPC UA endpoints
 
 `@yarkivaev/scada/opcua` exports `opcuaConnections(connections, publish, options)`
-and `validateConnections(connections)`. Offline deployment planners should import
+and `validateConnections(connections)` as compatibility adapters. The runtime is
+implemented by `opcuaSource(connections, collector, options)` in
+`@yarkivaev/source-to-sink`, whose collector accepts `{ channel, value }`.
+Offline deployment planners should import
 `validateConnections` from `@yarkivaev/scada/opcua/config`; this entry point never
 loads the network library or its startup diagnostics. Each connection has a unique `url`,
 positive `publishMs` and `heartbeatMs`, and `channels` with explicit, unique

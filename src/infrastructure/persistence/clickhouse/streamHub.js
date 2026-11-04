@@ -9,14 +9,16 @@
  *   const sub = hub.watch('m1/V', since, 1000, onRow, { unit: 'V', clock });
  *   sub.cancel();
  */
+import { intervalSource } from '@yarkivaev/source-to-sink';
 import pollTopicCursors from './pollTopicCursors.js';
 
 const hubs = new WeakMap();
 
 function defaultSchedule(step, fn) {
-    const timer = setInterval(fn, step);
+    const source = intervalSource(step, { accept: fn });
+    void source.start();
     return () => {
-        clearInterval(timer);
+        return source.stop();
     };
 }
 
@@ -74,21 +76,25 @@ function cursorsOf(bucket) {
     return cursors;
 }
 
+function advance(watcher, timestamp) {
+    if (timestamp.getTime() > watcher.lastTs.getTime()) {
+        watcher.lastTs = timestamp;
+    }
+}
+
 function dispatch(bucket, rows) {
-    rows.forEach((row) => {
+    return rows.reduce(async (previous, row) => {
+        await previous;
         const group = bucket.watchers.get(row.topic);
-        if (!group) {
-            return;
-        }
+        if (!group) { return; }
         const timestamp = parseTimestamp(row.ts);
-        group.forEach((watcher) => {
-            if (timestamp.getTime() <= watcher.lastTs.getTime()) {
-                return;
-            }
-            watcher.callback({ timestamp, value: row.value, unit: watcher.unit });
-            watcher.lastTs = timestamp;
-        });
-    });
+        await [...group].reduce(async (previousWatcher, watcher) => {
+            await previousWatcher;
+            if (timestamp.getTime() <= watcher.lastTs.getTime()) { return; }
+            await watcher.callback({ timestamp, value: row.value, unit: watcher.unit });
+            advance(watcher, timestamp);
+        }, Promise.resolve());
+    }, Promise.resolve());
 }
 
 function buildHub(connection, schedule) {
@@ -106,7 +112,7 @@ function buildHub(connection, schedule) {
                     cursorsOf(bucket),
                     bucket.clock()
                 );
-                dispatch(bucket, rows);
+                await dispatch(bucket, rows);
             } catch (err) {
                 console.error( // eslint-disable-line no-console
                     `Stream batch failed on ${connection.url()}:`,

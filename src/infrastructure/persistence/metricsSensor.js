@@ -1,3 +1,4 @@
+import { intervalSource } from '@yarkivaev/source-to-sink';
 import seriesRows, { parseTimestamp } from './seriesRows.js';
 
 function pollStream(spec) {
@@ -6,21 +7,23 @@ function pollStream(spec) {
         return new Date();
     });
     let lastTs = since;
-    const timer = setInterval(async () => {
+    const source = intervalSource(step, { async accept() {
         try {
             const rows = await read.poll(topic, lastTs.toISOString(), time().toISOString());
-            rows.forEach((row) => {
+            await rows.reduce(async (previous, row) => {
+                await previous;
                 const timestamp = parseTimestamp(row.ts);
-                callback({ timestamp, value: row.value, unit });
+                await callback({ timestamp, value: row.value, unit });
                 lastTs = timestamp;
-            });
+            }, Promise.resolve());
         } catch {
             /* next poll retries */
         }
-    }, step);
+    } });
+    void source.start();
     return {
         cancel() {
-            clearInterval(timer);
+            return source.stop();
         }
     };
 }

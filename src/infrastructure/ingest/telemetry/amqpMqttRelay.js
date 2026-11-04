@@ -1,4 +1,4 @@
-import durableConsume from '../durableConsume.js';
+import { amqpSource } from '@yarkivaev/source-to-sink';
 import deliverToMqttRecord from './deliverToMqttRecord.js';
 
 /**
@@ -34,24 +34,14 @@ export function relayConsumer(sink, channel) {
  * @param {object} [options] - prefetch count
  * @returns {object} Relay with start and stop
  */
-function subscribeRelay(queue, prefetch, sink) {
-    return async (channel) => {
-        await channel.assertQueue(queue, { durable: true });
-        channel.prefetch(prefetch);
-        const onMessage = relayConsumer(sink, channel);
-        const tag = await channel.consume(queue, onMessage, { noAck: false });
-        return tag.consumerTag;
-    };
-}
-
 export default function amqpMqttRelay(amqpUrl, queue, sink, options = {}) {
     const prefetch = options.prefetch || 32;
     let opened = false;
-    const session = durableConsume(
-        amqpUrl,
-        subscribeRelay(queue, prefetch, sink),
-        options
-    );
+    const session = amqpSource(amqpUrl, queue, {
+        accept(delivery) {
+            return sink.write([deliverToMqttRecord(delivery.fields, delivery.content)]);
+        }
+    }, { ...options, prefetch });
     return {
         start() {
             if (!opened) {
@@ -62,7 +52,8 @@ export default function amqpMqttRelay(amqpUrl, queue, sink, options = {}) {
         },
         async stop() {
             await session.stop();
-            sink.stop();
+            await sink.stop();
+            opened = false;
         }
     };
 }

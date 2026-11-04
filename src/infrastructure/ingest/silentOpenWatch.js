@@ -1,3 +1,5 @@
+import { intervalSource } from '@yarkivaev/source-to-sink';
+
 /**
  * Periodic wall-clock sweep that closes stale open segments without waiting for STOMP.
  *
@@ -18,46 +20,7 @@ export default function silentOpenWatch(closer, budget, options) {
         throw new Error(`Budget must be a positive number: ${budget}`);
     }
     const intervalMs = options && options.intervalMs ? options.intervalMs : 5000;
-    const gate = { busy: false };
-    let timer;
-    let active = false;
-    function claim() {
-        const free = !gate.busy;
-        gate.busy = true;
-        return free;
-    }
-    function release() {
-        gate.busy = false;
-    }
-    async function tick() {
-        if (!claim()) {
-            return;
-        }
-        try {
-            await closer.close(budget);
-        } catch {
-            /* next tick retries */
-        }
-        release();
-    }
-    return {
-        async start() {
-            if (active) {
-                return;
-            }
-            active = true;
-            await tick();
-            timer = setInterval(() => {
-                void tick();
-            }, intervalMs);
-        },
-        stop() {
-            if (!active) {
-                return;
-            }
-            active = false;
-            clearInterval(timer);
-            timer = undefined;
-        }
-    };
+    return intervalSource(intervalMs, {
+        accept() { return closer.close(budget); }
+    }, { immediate: true });
 }

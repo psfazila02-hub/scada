@@ -40,6 +40,7 @@ describe('durableConsume', function() {
         const session = harness(links, pending);
         await session.start();
         links[0].connection.emit('close');
+        await new Promise((resolve) => { setImmediate(resolve); });
         await pending[0]();
         assert.strictEqual(
             links.length,
@@ -55,6 +56,7 @@ describe('durableConsume', function() {
         await session.start();
         links[0].connection.emit('error', new Error(`сбой-${Math.random().toString(36).slice(2)}`));
         links[0].connection.emit('close');
+        await new Promise((resolve) => { setImmediate(resolve); });
         assert.strictEqual(pending.length, 1, 'error and close scheduled two reconnects');
     });
 
