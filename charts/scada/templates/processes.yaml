@@ -58,6 +58,28 @@ spec:
           image: {{ required "process image is required" (default $.Values.image .image) | quote }}
           imagePullPolicy: IfNotPresent
           command: {{ required "process command is required" .command | toJson }}
+          {{- with .health }}
+          ports:
+            - name: health
+              containerPort: {{ .port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: {{ default "/live" .livenessPath | quote }}
+              port: health
+            initialDelaySeconds: {{ if hasKey . "initialDelaySeconds" }}{{ .initialDelaySeconds }}{{ else }}2{{ end }}
+            periodSeconds: {{ default 10 .periodSeconds }}
+            timeoutSeconds: {{ default 2 .timeoutSeconds }}
+            failureThreshold: {{ default 3 .failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ default "/ready" .readinessPath | quote }}
+              port: health
+            initialDelaySeconds: {{ if hasKey . "initialDelaySeconds" }}{{ .initialDelaySeconds }}{{ else }}2{{ end }}
+            periodSeconds: {{ default 10 .periodSeconds }}
+            timeoutSeconds: {{ default 2 .timeoutSeconds }}
+            failureThreshold: {{ default 3 .failureThreshold }}
+          {{- end }}
           {{- if .hostDevices }}
           securityContext:
             privileged: true
