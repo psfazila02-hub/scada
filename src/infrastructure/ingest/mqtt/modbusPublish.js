@@ -260,6 +260,10 @@ export default function modbusPublish(mqtt, config) {
         return [row.name, plans[index]];
     }));
     return modbusMqtt(mqtt, specs, {
+        budget: config.budget,
+        maxRecords: config.maxRecords,
+        maxBytes: config.maxBytes,
+        writeTimeoutMs: config.writeTimeoutMs,
         address: frame.address,
         clientId: config.clientId || 'scada-modbus',
         count: frame.count,

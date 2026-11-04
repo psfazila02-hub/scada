@@ -395,3 +395,93 @@ before applying the replacement. This trades a collection gap for no overlap.
 The caller must bind each selector to its old Deployment; no namespace-wide prune
 is performed. Render/check/diff do not delete anything. An optional process `image`
 overrides the release image, so unrelated collectors can retain their pinned runtime.
+
+## Universal collector runtime
+
+`scada-collector manifest.json` (or `scada-collector -` for stdin) runs all
+registered adapters inside one Node.js process. Every instance has the same
+registry; assignments select its work. `COLLECTOR_MANIFEST` accepts inline JSON;
+`COLLECTOR_MANIFEST_PATH` selects a file. SIGHUP reconciles the file, SIGTERM/SIGINT
+perform bounded shutdown. No cluster scheduler, lease service or network control
+API is included. HTTP request handlers and their process-local read models remain
+owned by the HTTP application; use `COLLECTOR_MODE=external` to disable its
+transferable background collection before assigning that work elsewhere.
+
+```js
+import { createRegistry, createRuntime } from '@yarkivaev/scada/runtime';
+const runtime = createRuntime({ registry: createRegistry() });
+await runtime.apply({ taskId: 'line-reader', generation: 1, specVersion: 1,
+  spec: { adapter: 'modbus', url: 'mqtt://broker', config: {
+    addresses: ['tcp://127.0.0.1:502'], streams: [], maps: [], interval: 5
+  } } });
+await runtime.remove({ taskId: 'line-reader', generation: 2 });
+await runtime.stop();
+```
+
+Adapters include `stream` (registered source/transform/sinks), `modbus`,
+`activity`, `amqp-relay`, `amqp-metrics`, `mqtt-metrics`, `operation-sync`,
+`amqp-pg-metrics`, `silent-streams` and `stomp-ingest`. Plant packages extend the
+registry with domain-specific adapters; OPC UA belongs here, not in
+source-to-sink. Constructors do not open connections. A task owns independent
+connections and must close them in `stop()`. Factories are trusted code, not
+arbitrary scripts supplied in manifests.
+
+Assignments have stable task IDs, externally supplied integer generations and
+`specVersion: 1`. An optional `specHash` is checked against canonical JSON.
+Identical repeats are idempotent; conflicting/stale generations are rejected.
+Replacement waits for the previous owner to stop. Removed IDs retain bounded
+in-memory tombstones. Cleanup timeout quarantines resources and marks the
+runtime fatal; it never authorizes a second owner. Generation and PostgreSQL CAS
+are local/conflict safeguards, **not distributed fencing**. The external agent
+must establish cross-node ownership and provide current assignments after restart.
+
+Secrets can be references such as `{ "$secret": "AMQP_URL" }`, resolved by the
+host immediately before adapter construction. Status excludes configuration and
+exception messages. Optional `COLLECTOR_HEALTH_PORT` and
+`COLLECTOR_HEALTH_HOST` (default `127.0.0.1`) expose read-only `/live`, `/ready`
+and `/status`. Readiness represents admission, not the health of every remote
+server. Fatal cleanup makes liveness fail. A blocked event loop cannot answer
+an external probe; synchronous infinite loops/native crashes still affect the
+entire process. No hard CPU or native-memory isolation is claimed.
+
+The process defaults to 16 MiB / 16,384 buffered records, each task to 1 MiB /
+1,024, with bounded control admission and start/stop deadlines. Adapter-owned
+buffers and actual sink promises reserve capacity; driver/internal allocations
+and transient JSON decoding are not a hard RSS limit. Configure capacities for
+all simultaneously retained pipeline stages. MQTT and Loki collectors flush
+individual accepted records because their source delivery is sequential;
+AMQP pipelines retain bounded timed batching. Timeout is not proof that a remote
+side effect did not happen.
+
+`stream` requires explicit `delivery: "live" | "durable"`. Durable streams need
+`stateVersion`, `compatibilityKey`, stable `eventId` and a shared state store.
+Durable payloads and checkpoints use JSON; encode binary explicitly as strings.
+They persist an outbox and each recipient acknowledgement before advancing the
+checkpoint. MQTT requires QoS 1/2; AMQP sets persistent/mandatory publication and
+checks returned messages. Broker confirmation does not prove downstream business
+processing. An uncertain send can repeat with the same event ID; receivers must
+deduplicate. Sources with a non-null checkpoint must implement `restore()`;
+unsupported restoration fails closed. Live telemetry cannot replay downtime.
+Loki fails a saturated page rather than silently advancing across truncated data.
+
+The runner accepts `COLLECTOR_STATE_URL` for PostgreSQL. Apply
+`db/migrations/V0009__collector_task_state.sql` explicitly and grant the service
+role access before starting stateful assignments; the runner never runs schema
+migrations or falls back to local disk. The storage must be reachable from every
+eligible node. The built-in store rejects unsupported ownership tokens rather
+than pretending to enforce an external fencing protocol.
+
+The coordinated review branches require new source-to-sink/scada package releases
+before dependency installation can reproduce all runtime tests. Stable release/pin
+updates and deployment remain separate steps. Unit, transport,
+state recovery and mixed-runtime tests do not constitute a 24-hour production
+soak or prove cluster-wide exactly-once effects.
+
+## Streaming package boundary
+
+`@yarkivaev/source-to-sink` 2.x contains only protocol-independent composition
+primitives with no runtime dependencies. Protocol/storage implementations and
+their integration tests live in `src/infrastructure/streams` and are exported as
+`@yarkivaev/scada/streams`. This includes AMQP, MQTT, STOMP, serial, Modbus, Loki,
+PostgreSQL, ClickHouse and SQLite; OPC UA stays in `@yarkivaev/scada/opcua`.
+Plant-specific transformations stay in the plant package.

@@ -28,6 +28,29 @@ describe('named processes in the scada chart', function() {
         assert.ok(manifest.includes('type: CharDevice'));
     });
 
+    it('renders HTTP probes only for processes that opt into health', function() {
+        const manifest = render({ prefix: 'station', site: { enabled: false }, sink: { enabled: false }, postgres: { enabled: false }, rabbitmq: { enabled: false },
+            processes: [{ name: 'collector', command: ['collect'], health: { port: 9091, periodSeconds: 7 } }, { name: 'legacy', command: ['legacy'] }] });
+        const documents = manifest.split('---');
+        const collector = documents.find((item) => { return item.includes('name: station-collector'); });
+        const legacy = documents.find((item) => { return item.includes('name: station-legacy'); });
+        assert(collector.includes('livenessProbe:'));
+        assert(collector.includes('readinessProbe:'));
+        assert(collector.includes('path: "/live"'));
+        assert(collector.includes('path: "/ready"'));
+        assert(collector.includes('containerPort: 9091'));
+        assert(collector.includes('periodSeconds: 7'));
+        assert(!legacy.includes('livenessProbe:'));
+        assert(!legacy.includes('readinessProbe:'));
+        assert(!manifest.includes('kind: Service'));
+    });
+
+    it('rejects invalid HTTP health ports and timeouts', function() {
+        [ { port: 0 }, { port: 65536 }, { port: 9091, timeoutSeconds: 0 } ].forEach((health) => {
+            assert.throws(() => { render({ processes: [{ name: 'collector', command: ['collect'], health }] }); }, /health/u);
+        });
+    });
+
     it('can use a named broker PVC, MQTT node port, configuration and explicit definitions', function() {
         const manifest = render({ rabbitmq: {
             claimName: 'persisted-queue', configName: 'broker-settings', plugins: ['rabbitmq_management'],

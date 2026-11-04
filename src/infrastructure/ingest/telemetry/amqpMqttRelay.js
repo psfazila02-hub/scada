@@ -1,4 +1,4 @@
-import { amqpSource } from '@yarkivaev/source-to-sink';
+import { amqpSource } from '../../streams/index.js';
 import deliverToMqttRecord from './deliverToMqttRecord.js';
 
 /**
@@ -11,11 +11,15 @@ import deliverToMqttRecord from './deliverToMqttRecord.js';
 export function relayConsumer(sink, channel) {
     return (msg) => {
         if (!msg) {
-            return;
+            return undefined;
         }
         const record = deliverToMqttRecord(msg.fields, msg.content);
-        sink.write([record]);
+        const written = sink.write([record]);
+        if (written && typeof written.then === 'function') {
+            return written.then(() => { channel.ack(msg); });
+        }
         channel.ack(msg);
+        return undefined;
     };
 }
 
@@ -23,7 +27,7 @@ export function relayConsumer(sink, channel) {
  * AMQP queue consumer that republishes messages to MQTT using routing key as topic.
  *
  * @example
- *   import { mqttSink } from '@yarkivaev/source-to-sink';
+ *   import { mqttSink } from '../../streams/index.js';
  *   const sink = mqttSink('mqtt://localhost:1883', { qos: 1 });
  *   const relay = amqpMqttRelay('amqp://localhost', 'scada.telemetry.ingest', sink);
  *   relay.start();
@@ -43,10 +47,10 @@ export default function amqpMqttRelay(amqpUrl, queue, sink, options = {}) {
         }
     }, { ...options, prefetch });
     return {
-        start() {
+        async start() {
             if (!opened) {
+                await sink.start();
                 opened = true;
-                sink.start();
             }
             return session.start();
         },

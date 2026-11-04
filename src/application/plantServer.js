@@ -1,5 +1,5 @@
 import http from 'http';
-import { stompSource } from '@yarkivaev/source-to-sink';
+import { stompSource } from '../infrastructure/streams/index.js';
 import plantApi from './plantApi.js';
 import pgAlerts from '../infrastructure/persistence/pg/alerts.js';
 import postgresPool from '../infrastructure/persistence/postgresPool.js';

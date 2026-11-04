@@ -1,7 +1,5 @@
-import {
-    postgresSink,
-    stompSource
-} from '@yarkivaev/source-to-sink';
+import stompOptions from './stompOptions.js';
+import { postgresSink, stompSource } from '../../streams/index.js';
 import segmentDispatch from '../../../domain/segment/dispatch.js';
 import segmentCoalesce from '../../../domain/segment/segmentCoalesce.js';
 import silenceBudget from '../../../domain/segment/silenceBudget.js';
@@ -64,14 +62,7 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
         interval: config.interval
     });
     const destination = config.segmentsDestination || segmentsIngestDestination;
-    const source = stompSource(stomp, destination, coalesce, {
-        login: config.login,
-        passcode: config.passcode,
-        host: config.host,
-        serial: false,
-        manualAck: true,
-        prefetch: config.prefetch
-    });
+    const source = stompSource(stomp, destination, coalesce, stompOptions(config, { serial: false, manualAck: true }));
     const silence = silentOpenWatch(closeSilentOpen(pool), budget, {
         intervalMs: (config.poll || 5) * 1000
     });
@@ -82,13 +73,13 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
             void repair.catch((error) => {
                 processingErrorLog('abut_segments', error, { budgetSeconds: budget });
             });
-            source.start();
+            await source.start();
             await silence.start();
         },
-        stop() {
-            silence.stop();
-            source.stop();
-            pool.end();
+        async stop() {
+            await silence.stop();
+            await source.stop();
+            await pool.end();
         }
     };
 }

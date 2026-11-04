@@ -1,4 +1,5 @@
-import { stompSource } from '@yarkivaev/source-to-sink';
+import stompOptions from './stompOptions.js';
+import { stompSource } from '../../streams/index.js';
 import userDecisionCodec from '../codecs/userDecisionCodec.js';
 import userDecisionSink from '../sinks/userDecisionSink.js';
 
@@ -26,20 +27,20 @@ export default function decisionPipeline(stomp, pool, config) {
     const sink = userDecisionSink(pool);
     const codec = userDecisionCodec(sink);
     const source = stompSource(stomp, '/exchange/scada.user_decisions', codec,
-        { login: config.login, passcode: config.passcode, host: config.host });
+        stompOptions(config));
     return {
         /**
          * Starts consuming user decisions from RabbitMQ.
          */
         start() {
-            source.start();
+            return source.start();
         },
         /**
          * Stops consuming and releases resources.
          */
-        stop() {
-            source.stop();
-            pool.end();
+        async stop() {
+            await source.stop();
+            await pool.end();
         }
     };
 }

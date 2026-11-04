@@ -1,4 +1,4 @@
-import { clickhouseSink } from '@yarkivaev/source-to-sink';
+import { clickhouseSink } from '../../infrastructure/streams/index.js';
 import { jobRoutes, jobs } from '@yarkivaev/simple-server';
 import exportQuery from '../export/exportQuery.js';
 import scadaClient from '../../infrastructure/client/scadaClient.js';

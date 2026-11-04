@@ -1,20 +1,30 @@
 import { checkSubscription, watchSubscription } from './subscriptionHealth.js';
 import { AttributeIds, TimestampsToReturn } from 'node-opcua';
 
-function deliver(state, channel, value, publish, options) {
-    if (state.active && !state.failure && value.statusCode.isGood()) {
+function report(state, options, error) {
+    try { options.onError?.(error, state.connection); } catch {
+        // Callback isolation.
+    }
+}
+function admitted(state, options) {
+    if (state.pending.size < options.maxPending) { return true; }
+    if (!state.overflow) {
+        state.overflow = true;
+        report(state, options, new Error('OPC UA notification capacity exceeded; live value dropped'));
+    }
+    return false;
+}
+export function deliver(state, channel, value, publish, options) {
+    if (state.active && !state.failure && value.statusCode.isGood() && admitted(state, options)) {
         const accepted = Promise.resolve().then(() => {
             if (state.active && !state.failure) {
-                return publish(channel, value.value.value);
+                return publish(channel, value.value.value, { signal: state.controller.signal });
             }
             return undefined;
-        }).catch((error) => {
-            try {
-                options.onError?.(error, state.connection);
-            } catch {
-                // Callback isolation.
-            }
-        }).finally(() => { state.pending.delete(accepted); });
+        }).catch((error) => { report(state, options, error); }).finally(() => {
+            state.pending.delete(accepted);
+            state.overflow = false;
+        });
         state.pending.add(accepted);
     }
 }

@@ -1,4 +1,6 @@
 import { OPCUAClient } from 'node-opcua';
+import { setMaxListeners } from 'node:events';
+import delivery from './delivery.js';
 import session from './session.js';
 
 function report(options, error, connection) {
@@ -26,11 +28,17 @@ function disconnection(client) {
         return pending;
     };
 }
+function attemptState(connection, options) {
+    const controller = new AbortController();
+    // Each admitted delivery registers one cancellation listener on this bounded fan-out.
+    setMaxListeners(options.maxPending + 1, controller.signal);
+    return { active: true, connection, wake: null, timer: null, pending: new Set(), controller };
+}
 async function attempt(state, connection, publish, options) {
     const client = clientFor(options);
     const close = disconnection(client);
     state.close = close;
-    const current = { active: true, connection, wake: null, timer: null, pending: new Set() };
+    const current = attemptState(connection, options);
     state.current = current;
     try {
         await client.connect(connection.url);
@@ -58,18 +66,20 @@ async function run(state, connection, publish, options) {
     }
 }
 export default function endpoint(connection, publish, options) {
+    const send = delivery(publish, options);
     const state = { active: false, close: null, current: null, task: null, wake: null, timer: null };
     return {
         start() {
             if (!state.active) {
                 state.active = true;
-                state.task = run(state, connection, publish, options);
+                state.task = run(state, connection, send, options);
             }
         },
         async stop() {
             state.active = false;
             if (state.current) {
                 state.current.active = false;
+                state.current.controller.abort();
                 state.current.wake?.();
             }
             state.wake?.();

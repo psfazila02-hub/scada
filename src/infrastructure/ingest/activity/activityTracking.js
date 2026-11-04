@@ -1,19 +1,14 @@
-import {
-    batch,
-    circuit,
-    clickhouseSink,
-    clock,
-    lokiSource,
-    timedBatch
-} from '@yarkivaev/source-to-sink';
+import { clock } from '@yarkivaev/source-to-sink';
+import { clickhouseSink, lokiSource } from '../../streams/index.js';
+import ingestBatch from '../ingestBatch.js';
 import activityCodec from './activityTransformer.js';
 
 /**
  * Pipeline for streaming Loki HTTP access logs to ClickHouse.
  *
- * Polls Loki for log entries matching the query and batches them
- * before inserting into ClickHouse `activity.http_access` table.
- * Uses circuit breaker for failure isolation.
+ * Polls Loki and durably inserts each accepted log into ClickHouse
+ * before advancing the serial source cursor.
+ * Bounds pending records and bytes and waits for durable writes.
  *
  * @example
  *   const pipeline = activityTracking(
@@ -31,10 +26,10 @@ import activityCodec from './activityTransformer.js';
  * @param {string} query - LogQL query string
  * @param {object} config - Pipeline configuration
  * @param {number} config.poll - Loki polling interval in seconds
- * @param {number} config.size - Batch size before flush
+ * @param {number} config.size - Legacy option; serial durable acceptance writes one record at a time
  * @param {number} config.interval - Seconds before time-based flush
- * @param {number} config.threshold - Circuit breaker failure threshold
- * @param {number} config.timeout - Circuit breaker timeout in seconds
+ * @param {number} config.threshold - Legacy option (retained for configuration compatibility)
+ * @param {number} config.timeout - Legacy option (use writeTimeoutMs for write deadlines)
  * @returns {object} Pipeline with start() and stop() methods
  */
 export default function activityTracking(loki, clickhouse, query, config) {
@@ -51,24 +46,23 @@ export default function activityTracking(loki, clickhouse, query, config) {
         throw new Error('Config must be an object');
     }
     const clk = clock();
-    const breaker = circuit(config.threshold, config.timeout, clk);
     const sink = clickhouseSink(clickhouse, 'activity.http_access');
-    const collector = timedBatch(batch(sink, config.size, breaker), config.interval);
+    const collector = ingestBatch(sink, { ...config, size: 1 });
     const transformer = activityCodec(collector);
-    const source = lokiSource(loki, query, config.poll, transformer, clk);
+    const source = lokiSource(loki, query, config.poll, transformer, clk, { ...config.lokiOptions, budget: config.budget });
     return {
         /**
          * Starts the pipeline.
          */
         start() {
-            source.start();
+            return source.start();
         },
         /**
          * Stops the pipeline.
          */
-        stop() {
-            source.stop();
-            collector.stop();
+        async stop() {
+            await source.stop();
+            try { await collector.stop(); } finally { await sink.stop?.(); }
         }
     };
 }

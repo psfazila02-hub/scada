@@ -1,4 +1,5 @@
-import { amqpSource, batch, circuit, clock, timedBatch } from '@yarkivaev/source-to-sink';
+import { amqpSource } from '../../streams/index.js';
+import ingestBatch from '../ingestBatch.js';
 import deliverToMqttRecord from './deliverToMqttRecord.js';
 import metricsCodec from '../mqtt/metricsTransformer.js';
 import streamNameFromTopic from './streamNameFromTopic.js';
@@ -33,10 +34,14 @@ export function acceptTelemetryDeliver(codec, fields, content, onSeen) {
 export function telemetryConsumer(codec, channel, onSeen) {
     return (msg) => {
         if (!msg) {
-            return;
+            return undefined;
         }
-        acceptTelemetryDeliver(codec, msg.fields, msg.content, onSeen);
+        const accepted = acceptTelemetryDeliver(codec, msg.fields, msg.content, onSeen);
+        if (accepted && typeof accepted.then === 'function') {
+            return accepted.then(() => { channel.ack(msg); });
+        }
         channel.ack(msg);
+        return undefined;
     };
 }
 
@@ -51,13 +56,7 @@ export function telemetryConsumer(codec, channel, onSeen) {
  */
 export default function amqpMetricsIngest(amqpUrl, queue, sink, options = {}) {
     const prefetch = options.prefetch || 32;
-    const size = options.size || 100;
-    const interval = options.interval || 5;
-    const threshold = options.threshold || 5;
-    const timeout = options.timeout || 60;
-    const clk = clock();
-    const breaker = circuit(threshold, timeout, clk);
-    const collector = timedBatch(batch(sink, size, breaker), interval);
+    const collector = ingestBatch(sink, options);
     const codec = metricsCodec(collector);
     const session = amqpSource(amqpUrl, queue, {
         accept(delivery) {
@@ -70,7 +69,7 @@ export default function amqpMetricsIngest(amqpUrl, queue, sink, options = {}) {
         },
         async stop() {
             await session.stop();
-            collector.stop();
+            await collector.stop();
         }
     };
 }

@@ -1,4 +1,4 @@
-import { stompSend } from '@yarkivaev/source-to-sink';
+import { stompSend } from '../../streams/index.js';
 import userDecisionBody from './userDecisionBody.js';
 
 const DEFAULT_DESTINATION = '/exchange/scada.user_decisions';

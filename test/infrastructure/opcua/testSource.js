@@ -48,6 +48,7 @@ describe('OPC UA connections', function () {
         assert.throws(() => { connections([entry, entry], () => {}); }, /duplicate/iu);
         assert.throws(() => { connections([{ ...entry, channels: [...entry.channels, ...entry.channels] }], () => {}); }, /duplicate/iu);
         assert.throws(() => { connections([{ ...entry, heartbeatMs: 0 }], () => {}); });
+        assert.throws(() => { connections([entry], () => {}, { maxPending: 1.5 }); }, /integer/u);
     });
     it('isolates two endpoints, reads fresh heartbeats, recovers outage and stops cleanly', async function () {
         const firstPort = await port();
@@ -94,6 +95,39 @@ describe('OPC UA connections', function () {
         } finally {
             await runtime.stop();
             await Promise.all([first?.server.shutdown(0), second.server.shutdown(0)]);
+        }
+    });
+    it('enforces one shared pending-record budget across two real endpoints', async function () {
+        const first = await source(await port(), 11);
+        const second = await source(await port(), 22);
+        let reserved = 0;
+        let calls = 0;
+        let release;
+        const pending = new Promise((resolve) => { release = resolve; });
+        const errors = [];
+        const budget = { reserve({ bytes }) {
+            assert.ok(bytes > 0);
+            if (reserved) { throw new Error('Shared capacity exceeded'); }
+            reserved += 1;
+            return () => { reserved -= 1; };
+        } };
+        const runtime = opcuaSource([config(first.server.endpoints[0].port, 'a'), config(second.server.endpoints[0].port, 'b')],
+            { accept() { calls += 1; return pending; } },
+            { budget, deliveryTimeoutMs: 100, onError(error) { errors.push(error); } });
+        try {
+            await runtime.start();
+            await until(() => { return first.server.engine.currentSubscriptionCount === 1 && second.server.engine.currentSubscriptionCount === 1 && errors.some((error) => { return error.message.includes('Shared capacity'); }); });
+            assert.equal(calls, 1);
+            await runtime.stop();
+            assert.equal(reserved, 1);
+            release();
+            await pending;
+            await pause(0);
+            assert.equal(reserved, 0);
+        } finally {
+            release();
+            await runtime.stop();
+            await Promise.all([first.server.shutdown(0), second.server.shutdown(0)]);
         }
     });
     it('cancels an immediate start followed by stop', async function () {
@@ -191,6 +225,27 @@ describe('OPC UA connections', function () {
             await stopping;
         } finally {
             release();
+            await runtime.stop();
+            await available.server.shutdown(0);
+        }
+    });
+    it('bounds stop despite a hung collector and signals cancellation', async function () {
+        const number = await port();
+        const available = await source(number, 42);
+        const signals = [];
+        const runtime = opcuaSource([config(number, 'a')], { accept(record, context) {
+            signals.push(context.signal);
+            return new Promise(() => {});
+        } }, { deliveryTimeoutMs: 150, maxPending: 1, maxPendingBytes: 1024 });
+        try {
+            await runtime.start();
+            await until(() => { return signals.length > 0; });
+            const started = Date.now();
+            await runtime.stop();
+            assert.ok(Date.now() - started < 1000);
+            assert.equal(signals[0].aborted, true);
+            assert.equal(available.server.engine.currentSubscriptionCount, 0);
+        } finally {
             await runtime.stop();
             await available.server.shutdown(0);
         }
