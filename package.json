@@ -35,7 +35,7 @@
     "@clickhouse/client": "^1.0.0",
     "@modelcontextprotocol/sdk": "^1.24.3",
     "@yarkivaev/simple-server": "1.0.2",
-    "@yarkivaev/source-to-sink": "https://codeload.github.com/yarkivaev/source-to-sink/tar.gz/7ad33b71420231f87bc19a6d3494e71d265bbe2c",
+    "@yarkivaev/source-to-sink": "1.3.11",
     "amqplib": "^0.10.9",
     "node-opcua": "2.179.0",
     "pg": "^8.0.0",
