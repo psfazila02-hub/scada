@@ -272,7 +272,7 @@ Opaque operation `kind` strings and generic ports (`latestForMachine`, list/upse
 ### Stream transport ownership
 
 `@yarkivaev/source-to-sink` owns reusable Node.js sources, sinks and transport
-lifecycle: OPC UA subscriptions and heartbeat reads, serial input, Modbus polling,
+lifecycle: serial input, Modbus polling,
 MQTT/STOMP messaging, AMQP consumption and confirmed publishing, and serialized
 periodic ticks. SCADA composes these primitives with generic codecs, domain ports
 and persistence adapters. Plant packages supply source mappings, payload formats,
@@ -355,9 +355,10 @@ retired routes. Reconciliation retains stored queues.
 ### Collect multiple OPC UA endpoints
 
 `@yarkivaev/scada/opcua` exports `opcuaConnections(connections, publish, options)`
-and `validateConnections(connections)` as compatibility adapters. The runtime is
-implemented by `opcuaSource(connections, collector, options)` in
-`@yarkivaev/source-to-sink`, whose collector accepts `{ channel, value }`.
+and `validateConnections(connections)`. The same entry point exports
+`opcuaSource(connections, collector, options)` for source-to-sink composition;
+the collector accepts `{ channel, value }`. SCADA owns the OPC UA runtime and
+its `node-opcua` dependency; source-to-sink contains no OPC UA implementation.
 Offline deployment planners should import
 `validateConnections` from `@yarkivaev/scada/opcua/config`; this entry point never
 loads the network library or its startup diagnostics. Each connection has a unique `url`,
