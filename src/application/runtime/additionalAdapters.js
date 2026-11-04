@@ -60,6 +60,7 @@ function metrics(spec, pool, context) {
 }
 function mqttPostgres(spec, pool, context) {
     let failed = false;
+    context.report?.({ state: 'degraded' });
     return mqttMetrics(spec.mqtt, metricsSinkFromPool(pool), spec.topic, {
         ...boundedOptions(spec), budget: context.budget,
         onReady() { if (!failed) { context.report?.({ state: 'running' }); } },

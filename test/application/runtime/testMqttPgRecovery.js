@@ -39,7 +39,9 @@ describe('MQTT PostgreSQL failure recovery', function () {
         const runtime = createRuntime({ registry });
         let replacement;
         try {
-            await runtime.apply(request); await turn();
+            await runtime.apply(request);
+            assert.equal(runtime.status().tasks[0].health, 'degraded');
+            await turn();
             transport.client.emit('offline');
             assert.equal(runtime.status().tasks[0].health, 'degraded');
             transport.client.emit('error', new Error('broker disconnected'));
