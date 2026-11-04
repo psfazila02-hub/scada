@@ -1,4 +1,4 @@
-import { clickhouseSink, mqttSink } from '@yarkivaev/source-to-sink';
+import { clickhouseSink, mqttSink } from '../../infrastructure/streams/index.js';
 import activityTracking from '../../infrastructure/ingest/activity/activityTracking.js';
 import amqpMetricsIngest from '../../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 import amqpMqttRelay from '../../infrastructure/ingest/telemetry/amqpMqttRelay.js';

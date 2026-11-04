@@ -1,5 +1,5 @@
 import stompOptions from './stompOptions.js';
-import { stompSource } from '@yarkivaev/source-to-sink';
+import { stompSource } from '../../streams/index.js';
 import alertCodec from '../codecs/alertCodec.js';
 import alertSink from '../sinks/alertSink.js';
 

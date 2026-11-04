@@ -1,4 +1,4 @@
-import { clickhouseSink } from '@yarkivaev/source-to-sink';
+import { clickhouseSink } from '../../infrastructure/streams/index.js';
 import amqpMetricsIngest from '../../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 import operationSyncIngest from '../../infrastructure/sync/operationSyncIngest.js';
 import operationsFromPg from '../../infrastructure/persistence/pg/operations.js';

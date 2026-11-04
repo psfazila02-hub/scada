@@ -4,7 +4,7 @@ import { after, before, describe, it } from 'mocha';
 import { GenericContainer } from 'testcontainers';
 import mqtt from 'mqtt';
 import { createClient } from '@clickhouse/client';
-import { clickhouseSink } from '@yarkivaev/source-to-sink';
+import { clickhouseSink } from '../../../../../src/infrastructure/streams/index.js';
 import ciContainerImage from '../../../../helpers/ciContainerImage.js';
 import mqttMetrics from '../../../../../src/infrastructure/ingest/mqtt/mqttMetrics.js';
 

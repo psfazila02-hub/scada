@@ -476,3 +476,12 @@ before dependency installation can reproduce all runtime tests. Stable release/p
 updates and deployment remain separate steps. Unit, transport,
 state recovery and mixed-runtime tests do not constitute a 24-hour production
 soak or prove cluster-wide exactly-once effects.
+
+## Streaming package boundary
+
+`@yarkivaev/source-to-sink` 2.x contains only protocol-independent composition
+primitives with no runtime dependencies. Protocol/storage implementations and
+their integration tests live in `src/infrastructure/streams` and are exported as
+`@yarkivaev/scada/streams`. This includes AMQP, MQTT, STOMP, serial, Modbus, Loki,
+PostgreSQL, ClickHouse and SQLite; OPC UA stays in `@yarkivaev/scada/opcua`.
+Plant-specific transformations stay in the plant package.

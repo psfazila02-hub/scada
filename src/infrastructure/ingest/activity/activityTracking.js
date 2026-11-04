@@ -1,8 +1,5 @@
-import {
-    clickhouseSink,
-    clock,
-    lokiSource
-} from '@yarkivaev/source-to-sink';
+import { clock } from '@yarkivaev/source-to-sink';
+import { clickhouseSink, lokiSource } from '../../streams/index.js';
 import ingestBatch from '../ingestBatch.js';
 import activityCodec from './activityTransformer.js';
 

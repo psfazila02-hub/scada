@@ -1,4 +1,4 @@
-import { mqttSource } from '@yarkivaev/source-to-sink';
+import { mqttSource } from '../../streams/index.js';
 import ingestBatch from '../ingestBatch.js';
 import metricsCodec from './metricsTransformer.js';
 
@@ -10,7 +10,7 @@ import metricsCodec from './metricsTransformer.js';
  * Bounds queued records and bytes and enforces a durable-write deadline.
  *
  * @example
- *   import { clickhouseSink } from '@yarkivaev/source-to-sink';
+ *   import { clickhouseSink } from '../../streams/index.js';
  *   const sink = clickhouseSink('http://localhost:8123', 'scada.metrics');
  *   const pipeline = mqttMetrics(
  *     'mqtt://localhost:1883',

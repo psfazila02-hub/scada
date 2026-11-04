@@ -1,4 +1,4 @@
-import { amqpSource } from '@yarkivaev/source-to-sink';
+import { amqpSource } from '../streams/index.js';
 import operationCodec from './operationCodec.js';
 import operationSyncSink from './operationSyncSink.js';
 

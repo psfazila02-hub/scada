@@ -1,4 +1,4 @@
-import { postgresSink } from '@yarkivaev/source-to-sink';
+import { postgresSink } from '../../infrastructure/streams/index.js';
 import {
     alertRow,
     listedItems,

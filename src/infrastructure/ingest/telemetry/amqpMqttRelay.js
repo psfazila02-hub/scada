@@ -1,4 +1,4 @@
-import { amqpSource } from '@yarkivaev/source-to-sink';
+import { amqpSource } from '../../streams/index.js';
 import deliverToMqttRecord from './deliverToMqttRecord.js';
 
 /**
@@ -27,7 +27,7 @@ export function relayConsumer(sink, channel) {
  * AMQP queue consumer that republishes messages to MQTT using routing key as topic.
  *
  * @example
- *   import { mqttSink } from '@yarkivaev/source-to-sink';
+ *   import { mqttSink } from '../../streams/index.js';
  *   const sink = mqttSink('mqtt://localhost:1883', { qos: 1 });
  *   const relay = amqpMqttRelay('amqp://localhost', 'scada.telemetry.ingest', sink);
  *   relay.start();

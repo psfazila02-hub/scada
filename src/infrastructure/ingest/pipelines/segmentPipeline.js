@@ -1,8 +1,5 @@
 import stompOptions from './stompOptions.js';
-import {
-    postgresSink,
-    stompSource
-} from '@yarkivaev/source-to-sink';
+import { postgresSink, stompSource } from '../../streams/index.js';
 import segmentDispatch from '../../../domain/segment/dispatch.js';
 import segmentCoalesce from '../../../domain/segment/segmentCoalesce.js';
 import silenceBudget from '../../../domain/segment/silenceBudget.js';

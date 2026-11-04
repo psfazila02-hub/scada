@@ -1,4 +1,4 @@
-import { amqpSource } from '@yarkivaev/source-to-sink';
+import { amqpSource } from '../../streams/index.js';
 import ingestBatch from '../ingestBatch.js';
 import deliverToMqttRecord from './deliverToMqttRecord.js';
 import metricsCodec from '../mqtt/metricsTransformer.js';

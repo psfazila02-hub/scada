@@ -1,5 +1,5 @@
 import stompOptions from './stompOptions.js';
-import { stompSource } from '@yarkivaev/source-to-sink';
+import { stompSource } from '../../streams/index.js';
 import userDecisionCodec from '../codecs/userDecisionCodec.js';
 import userDecisionSink from '../sinks/userDecisionSink.js';
 

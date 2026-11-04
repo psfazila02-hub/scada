@@ -1,4 +1,4 @@
-import { clickhouseSink } from '@yarkivaev/source-to-sink';
+import { clickhouseSink } from '../infrastructure/streams/index.js';
 import supervisorSink from './supervisorSink.js';
 import plantServer from './plantServer.js';
 import plantOperations from './plantOperations.js';

@@ -1,4 +1,4 @@
-import { modbusSource } from '@yarkivaev/source-to-sink';
+import { modbusSource } from '../../streams/index.js';
 
 const layout = [
     { offset: 0, channel: 'AI1' },

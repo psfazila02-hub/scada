@@ -1,5 +1,5 @@
-import { amqpSink, amqpSource, clickhouseSink, clock, intervalSource, lokiSource, modbusRtuSource,
-    modbusSource, mqttSink, mqttSource, postgresSink, serialSource } from '@yarkivaev/source-to-sink';
+import { clock, intervalSource } from '@yarkivaev/source-to-sink';
+import { amqpSink, amqpSource, clickhouseSink, lokiSource, modbusRtuSource, modbusSource, mqttSink, mqttSource, postgresSink, serialSource } from '../../infrastructure/streams/index.js';
 import opcuaSource from '../../infrastructure/opcua/source.js';
 import resolveSecrets from './resolveSecrets.js';
 

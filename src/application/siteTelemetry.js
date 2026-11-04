@@ -1,4 +1,4 @@
-import { clickhouseSink } from '@yarkivaev/source-to-sink';
+import { clickhouseSink } from '../infrastructure/streams/index.js';
 import amqpMetricsIngest from '../infrastructure/ingest/telemetry/amqpMetricsIngest.js';
 import foldedMetricsSink from './foldedMetricsSink.js';
 import bindSilentStreams from './bindSilentStreams.js';

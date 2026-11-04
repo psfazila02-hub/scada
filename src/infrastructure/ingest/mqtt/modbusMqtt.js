@@ -1,10 +1,5 @@
-import {
-    clock,
-    modbusRtuBusSource,
-    modbusRtuSource,
-    modbusSource,
-    mqttSink
-} from '@yarkivaev/source-to-sink';
+import { clock } from '@yarkivaev/source-to-sink';
+import { modbusRtuBusSource, modbusRtuSource, modbusSource, mqttSink } from '../../streams/index.js';
 import ingestBatch from '../ingestBatch.js';
 import { parseModbusDeviceSpec } from './modbusDeviceSpec.js';
 
