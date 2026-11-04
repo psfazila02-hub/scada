@@ -331,7 +331,9 @@ retired routes. Reconciliation retains stored queues.
 ### Collect multiple OPC UA endpoints
 
 `@yarkivaev/scada/opcua` exports `opcuaConnections(connections, publish, options)`
-and `validateConnections(connections)`. Each connection has a unique `url`,
+and `validateConnections(connections)`. Offline deployment planners should import
+`validateConnections` from `@yarkivaev/scada/opcua/config`; this entry point never
+loads the network library or its startup diagnostics. Each connection has a unique `url`,
 positive `publishMs` and `heartbeatMs`, and `channels` with explicit, unique
 `nodeId` values. Additional channel metadata is opaque to this library.
 
