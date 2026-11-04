@@ -1,5 +1,20 @@
 import { clock, intervalSource } from '@yarkivaev/source-to-sink';
 
+function track(state, pending) {
+    if (!pending || typeof pending.then !== 'function') { return; }
+    const task = pending.catch((error) => {
+        state.failure = error;
+        try { state.onError?.(error); } catch {
+            // Reporting must not turn an observed source failure into an unhandled rejection.
+        }
+    })
+        .finally(() => { state.pending.delete(task); });
+    state.pending.add(task);
+}
+async function drained(state) {
+    await Promise.all(state.pending);
+    if (state.failure) { throw state.failure; }
+}
 /**
  * Whether a stream is past the silence budget.
  *
@@ -27,8 +42,12 @@ function stopOne(state, name) {
     if (!state.live.has(name)) {
         return;
     }
-    state.held.get(name).stop();
-    state.live.delete(name);
+    if (state.closing.has(name)) { return; }
+    const pending = state.held.get(name).stop();
+    if (pending && typeof pending.then === 'function') {
+        state.closing.add(name);
+        track(state, pending.finally(() => { state.live.delete(name); state.closing.delete(name); }));
+    } else { state.live.delete(name); }
 }
 
 /**
@@ -47,7 +66,7 @@ function startOne(state, source) {
         poll = source.open(state.collector, state.clk, state.intervalSec);
         state.held.set(name, poll);
     }
-    poll.start();
+    track(state, poll.start());
     state.live.add(name);
 }
 
@@ -88,6 +107,10 @@ function gateState(config) {
         lastSeen: new Map(),
         held: new Map(),
         live: new Set(),
+        closing: new Set(),
+        pending: new Set(),
+        failure: null,
+        onError: config.onError,
         collector: undefined,
         running: false
     };
@@ -129,22 +152,24 @@ export default function silentStreams(config) {
         bind(sink) {
             state.collector = {
                 accept(record) {
-                    sink.write([record]);
+                    return sink.write([record]);
                 }
             };
         },
         start() {
-            if (state.running) { return; }
+            if (state.running) { return drained(state); }
             state.running = true;
             runPulse();
-            void ticker.start();
+            track(state, ticker.start());
+            return drained(state);
         },
-        stop() {
+        async stop() {
             state.running = false;
-            void ticker.stop();
+            track(state, ticker.stop());
             for (const name of [...state.live]) {
                 stopOne(state, name);
             }
+            await drained(state);
             state.held.clear();
         },
         pulse: runPulse

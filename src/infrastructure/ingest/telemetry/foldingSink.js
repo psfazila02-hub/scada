@@ -12,9 +12,12 @@
  */
 export default function foldingSink(inner, fold, locate) {
     return {
-        async write(records) {
-            await inner.write(records);
+        stop() { return inner.stop?.(); },
+        async write(records, context = {}) {
+            context.signal?.throwIfAborted();
+            await inner.write(records, context);
             for (const record of records) {
+                context.signal?.throwIfAborted();
                 const sample = locate(record);
                 if (sample) {
                     // eslint-disable-next-line no-await-in-loop

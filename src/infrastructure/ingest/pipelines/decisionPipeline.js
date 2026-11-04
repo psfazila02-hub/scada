@@ -32,14 +32,14 @@ export default function decisionPipeline(stomp, pool, config) {
          * Starts consuming user decisions from RabbitMQ.
          */
         start() {
-            source.start();
+            return source.start();
         },
         /**
          * Stops consuming and releases resources.
          */
-        stop() {
-            source.stop();
-            pool.end();
+        async stop() {
+            await source.stop();
+            await pool.end();
         }
     };
 }

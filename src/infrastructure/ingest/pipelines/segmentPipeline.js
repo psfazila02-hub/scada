@@ -82,13 +82,13 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
             void repair.catch((error) => {
                 processingErrorLog('abut_segments', error, { budgetSeconds: budget });
             });
-            source.start();
+            await source.start();
             await silence.start();
         },
-        stop() {
-            silence.stop();
-            source.stop();
-            pool.end();
+        async stop() {
+            await silence.stop();
+            await source.stop();
+            await pool.end();
         }
     };
 }

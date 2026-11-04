@@ -35,14 +35,14 @@ export default function alertPipeline(stomp, pool, config) {
          * Starts the pipeline.
          */
         start() {
-            source.start();
+            return source.start();
         },
         /**
          * Stops the pipeline.
          */
-        stop() {
-            source.stop();
-            sink.stop();
+        async stop() {
+            await source.stop();
+            await sink.stop();
         }
     };
 }
