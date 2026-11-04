@@ -70,6 +70,9 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
         host: config.host,
         serial: false,
         manualAck: true,
+        maxMessageBytes: config.maxMessageBytes,
+        maxPendingBytes: config.maxPendingBytes,
+        budget: config.budget,
         prefetch: config.prefetch
     });
     const silence = silentOpenWatch(closeSilentOpen(pool), budget, {

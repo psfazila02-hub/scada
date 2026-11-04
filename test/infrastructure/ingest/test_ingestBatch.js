@@ -21,7 +21,7 @@ describe('production ingest batching', function () {
     it('flushes records on stop and propagates storage rejection to the caller', async function () {
         const collector = ingestBatch({ write() { return Promise.reject(new Error('disk full')); } }, { size: 10 });
         const accepted = assert.rejects(collector.accept({ value: 42 }), /disk full/u);
-        await collector.stop();
+        await assert.rejects(collector.stop(), /disk full/u);
         await accepted;
     });
 });

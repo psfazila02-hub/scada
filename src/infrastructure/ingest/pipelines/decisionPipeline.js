@@ -26,7 +26,8 @@ export default function decisionPipeline(stomp, pool, config) {
     const sink = userDecisionSink(pool);
     const codec = userDecisionCodec(sink);
     const source = stompSource(stomp, '/exchange/scada.user_decisions', codec,
-        { login: config.login, passcode: config.passcode, host: config.host });
+        { login: config.login, passcode: config.passcode, host: config.host,
+            prefetch: config.prefetch, maxMessageBytes: config.maxMessageBytes, maxPendingBytes: config.maxPendingBytes, budget: config.budget });
     return {
         /**
          * Starts consuming user decisions from RabbitMQ.

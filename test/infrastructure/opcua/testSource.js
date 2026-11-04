@@ -97,6 +97,39 @@ describe('OPC UA connections', function () {
             await Promise.all([first?.server.shutdown(0), second.server.shutdown(0)]);
         }
     });
+    it('enforces one shared pending-record budget across two real endpoints', async function () {
+        const first = await source(await port(), 11);
+        const second = await source(await port(), 22);
+        let reserved = 0;
+        let calls = 0;
+        let release;
+        const pending = new Promise((resolve) => { release = resolve; });
+        const errors = [];
+        const budget = { reserve({ bytes }) {
+            assert.ok(bytes > 0);
+            if (reserved) { throw new Error('Shared capacity exceeded'); }
+            reserved += 1;
+            return () => { reserved -= 1; };
+        } };
+        const runtime = opcuaSource([config(first.server.endpoints[0].port, 'a'), config(second.server.endpoints[0].port, 'b')],
+            { accept() { calls += 1; return pending; } },
+            { budget, deliveryTimeoutMs: 100, onError(error) { errors.push(error); } });
+        try {
+            await runtime.start();
+            await until(() => { return first.server.engine.currentSubscriptionCount === 1 && second.server.engine.currentSubscriptionCount === 1 && errors.some((error) => { return error.message.includes('Shared capacity'); }); });
+            assert.equal(calls, 1);
+            await runtime.stop();
+            assert.equal(reserved, 1);
+            release();
+            await pending;
+            await pause(0);
+            assert.equal(reserved, 0);
+        } finally {
+            release();
+            await runtime.stop();
+            await Promise.all([first.server.shutdown(0), second.server.shutdown(0)]);
+        }
+    });
     it('cancels an immediate start followed by stop', async function () {
         const number = await port();
         const available = await source(number, 42);

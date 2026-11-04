@@ -29,7 +29,8 @@ export default function alertPipeline(stomp, pool, config) {
     const sink = alertSink(pool);
     const codec = alertCodec(sink, config.translations || {});
     const source = stompSource(stomp, '/exchange/scada.alerts', codec,
-        { login: config.login, passcode: config.passcode, host: config.host });
+        { login: config.login, passcode: config.passcode, host: config.host,
+            prefetch: config.prefetch, maxMessageBytes: config.maxMessageBytes, maxPendingBytes: config.maxPendingBytes, budget: config.budget });
     return {
         /**
          * Starts the pipeline.

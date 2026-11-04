@@ -53,9 +53,9 @@ function telemetry(spec, pool) {
     const inner = spec.clickhouse ? clickhouseSink(spec.clickhouse, spec.table ?? 'scada.metrics') : metricsSinkFromPool(pool);
     return foldedMetricsSink(inner, pool, spec.devices);
 }
-function metrics(spec, pool) {
+function metrics(spec, pool, context) {
     const sink = telemetry(spec, pool);
-    return ownedSink(amqpMetricsIngest(spec.amqp, spec.queue, sink, boundedOptions(spec)), sink);
+    return ownedSink(amqpMetricsIngest(spec.amqp, spec.queue, sink, { ...boundedOptions(spec), budget: context.budget }), sink);
 }
 function silent(spec, pool, context) {
     const sink = telemetry(spec, pool);
@@ -64,13 +64,13 @@ function silent(spec, pool, context) {
         onError() { context.report?.({ state: 'degraded' }); } });
     streams.bind(sink);
     const ingest = amqpMetricsIngest(spec.amqp, spec.queue, sink, {
-        ...boundedOptions(spec), onSeen(name) { streams.seen(name); }
+        ...boundedOptions(spec), budget: context.budget, onSeen(name) { streams.seen(name); }
     });
     return ownedSink(together([ingest, streams]), sink);
 }
-function stomp(spec, pool) {
+function stomp(spec, pool, context) {
     const shared = borrowed(pool);
-    const config = { ...spec.config, ...boundedOptions({ ...spec, options: spec.config }) };
+    const config = { ...spec.config, ...boundedOptions({ ...spec, options: spec.config }), budget: context.budget };
     return together([
         segmentPipeline(spec.stomp, spec.postgres, shared, config),
         decisionPipeline(spec.stomp, shared, config),
@@ -127,8 +127,8 @@ function descriptor(factory, keys, validate = () => { return undefined; }, resou
 /** Portable consumers previously embedded in site HTTP processes; migrations remain external. */
 export default function additionalAdapters() {
     return new Map([
-        ['operation-sync', descriptor((spec, pool) => {
-            return operationSyncIngest(spec.amqp, spec.queue, operationsFromPg(pool), boundedOptions(spec));
+        ['operation-sync', descriptor((spec, pool, context) => {
+            return operationSyncIngest(spec.amqp, spec.queue, operationsFromPg(pool), { ...boundedOptions(spec), budget: context.budget });
         }, ['amqp', 'queue', 'postgres'])],
         ['amqp-pg-metrics', descriptor(metrics, ['amqp', 'queue', 'postgres'])],
         ['silent-streams', descriptor(silent, ['amqp', 'queue', 'sources'], silentConfig, (spec) => {
