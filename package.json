@@ -17,11 +17,13 @@
     "./rabbitmq/definitions": "./src/infrastructure/messaging/rabbitmq/definitions.js",
     "./rabbitmq/reconcile": "./src/infrastructure/messaging/rabbitmq/reconcile.js",
     "./opcua": "./src/infrastructure/opcua/index.js",
-    "./opcua/config": "./src/infrastructure/opcua/config.js"
+    "./opcua/config": "./src/infrastructure/opcua/config.js",
+    "./runtime": "./src/application/runtime/index.js"
   },
   "bin": {
     "modbus-to-mqtt": "./src/bin/modbus-to-mqtt.js",
-    "supervisor-sink": "./src/bin/supervisor-sink.js"
+    "supervisor-sink": "./src/bin/supervisor-sink.js",
+    "scada-collector": "./src/bin/collector.js"
   },
   "scripts": {
     "test": "mocha --exit 'test/**/test*.js'",

@@ -3,12 +3,7 @@
  *
  * Polls ADDRESS or MODBUS_DEVICES and publishes STREAM + MAPPING document paths.
  */
-process.on('unhandledRejection', (err) => {
-    process.stderr.write(`Unhandled rejection: ${String(err)}\n`);
-    process.exit(1);
-});
-
-import modbusPublish from '../infrastructure/ingest/mqtt/modbusPublish.js';
+import { createRegistry, runCollector } from '../application/runtime/index.js';
 
 /**
  * Parses a JSON array environment value.
@@ -41,7 +36,7 @@ function integer(text) {
 }
 
 const addresses = jsonList(process.env.ADDRESS);
-const pipeline = modbusPublish(process.env.MQTT_URL, {
+const config = {
     address: integer(process.env.MODBUS_ADDRESS),
     addresses,
     clientId: process.env.CLIENT_ID,
@@ -52,6 +47,13 @@ const pipeline = modbusPublish(process.env.MQTT_URL, {
     streams: jsonList(process.env.STREAM) || [],
     threshold: parseInt(process.env.CIRCUIT_THRESHOLD || '5', 10),
     timeout: parseInt(process.env.CIRCUIT_TIMEOUT || '60', 10)
-});
+};
 
-pipeline.start();
+try {
+    const env = { ...process.env, COLLECTOR_MANIFEST: JSON.stringify({ assignments: [{ taskId: 'modbus', generation: 0, specVersion: 1,
+        spec: { adapter: 'modbus', url: { $secret: 'MQTT_URL' }, config } }] }) };
+    await runCollector({ registry: createRegistry(), env, argv: [] });
+} catch (error) {
+    process.stderr.write(`collector: ${error.name}\n`);
+    process.exitCode = 1;
+}

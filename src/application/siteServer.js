@@ -11,6 +11,7 @@ import startTelemetryIngest from './siteTelemetry.js';
 import timelineOperatorFromEnv from './timelineOperatorFromEnv.js';
 import { buildSiteOperatorCatalog } from './siteOperatorCatalog.js';
 import siteSyncBind from './sync/siteSyncBind.js';
+import { collectionEnvironment, startCollection } from './siteCollection.js';
 
 function stompFromEnv(env) {
     return {
@@ -118,7 +119,7 @@ function siteExtraRoutes(catalog, extraRoutes, syncRoutes) {
  *   await siteServer({ plantFactory: ({ alerts, userDecisions }, sink) => edgePlant(machines, { metrics: sink.dataAccess.metrics, alerts, userDecisions }), kindSources: { temp } });
  */
 export default async function siteServer(config) {
-    const env = config.env || process.env;
+    const env = collectionEnvironment(config);
     const sink = supervisorSink(env);
     const ops = bindSiteOperations(sink, config.kindSources || config.operationSources);
     const http = edgeApi(sink.dataAccess, {
@@ -132,15 +133,15 @@ export default async function siteServer(config) {
         runRetention
     });
     await sink.run(http);
-    const mqtt = startMqtt(sink, env);
-    const telemetry = startTelemetryIngest(
+    const mqtt = startCollection(config, () => { return startMqtt(sink, env); });
+    const telemetry = startCollection(config, () => { return startTelemetryIngest(
         env,
         config.streams,
         mqttConfigFromEnv(env),
         sink.pool,
         config.intervalDevices
-    );
-    const operationSync = startOperationSync(sink, env);
+    ); });
+    const operationSync = startCollection(config, () => { return startOperationSync(sink, env); });
     const basePath = config.basePath || '/api/v1';
     const catalog = buildSiteOperatorCatalog(config, basePath, sink, env);
     if (catalog.sync) {

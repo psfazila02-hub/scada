@@ -31,7 +31,7 @@ function reply(socket, frame) {
         socket.write('CONNECTED\nversion:1.2\nheart-beat:0,0\n\n\0');
         return;
     }
-    if (frame.command === 'DISCONNECT' && frame.headers.receipt !== undefined) {
+    if (['SEND', 'DISCONNECT'].includes(frame.command) && frame.headers.receipt !== undefined) {
         socket.write(`RECEIPT\nreceipt-id:${frame.headers.receipt}\n\n\0`);
     }
 }
