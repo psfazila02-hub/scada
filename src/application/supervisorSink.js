@@ -15,7 +15,7 @@ const appRoot = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Reads deployment environment into a normalized config object.
- * `SINK_PIPELINES=false` leaves Postgres and the state HTTP API in this process
+ * `COLLECTOR_MODE=external` or `SINK_PIPELINES=false` leaves Postgres and the state HTTP API in this process
  * and leaves the STOMP consumers to another container.
  *
  * @param {NodeJS.ProcessEnv} env - process environment
@@ -41,7 +41,7 @@ export function readDeploymentConfig(env) {
         retentionDays: parseInt(env.RETENTION_DAYS || '30', 10),
         migrationsDir: path.join(root, 'db', 'migrations'),
         requestTimeoutMs: parseRequestTimeoutMs(env.REQUEST_TIMEOUT_MS),
-        pipelines: env.SINK_PIPELINES !== 'false',
+        pipelines: env.COLLECTOR_MODE !== 'external' && env.SINK_PIPELINES !== 'false',
         pipeline: {
             prefetch,
             deadLetter: env.SEGMENTS_DEAD_LETTER_ENABLED === 'true',
@@ -60,6 +60,12 @@ export function readDeploymentConfig(env) {
     };
 }
 
+function startPipelines(cfg, pool) {
+    const pipelines = [segmentPipeline(cfg.stomp, cfg.postgres, pool, cfg.pipeline),
+        decisionPipeline(cfg.stomp, pool, cfg.pipeline), alertPipeline(cfg.stomp, pool, cfg.pipeline)];
+    return Promise.all(pipelines.map((pipeline) => { return pipeline.start(); }));
+}
+
 /**
  * Wires STOMP pipelines, migrations, and state data access from env config.
  * HTTP binding uses edgeApi (metrics, checkpoint, retention).
@@ -70,9 +76,6 @@ export function readDeploymentConfig(env) {
 export default function supervisorSink(env = process.env) {
     const cfg = readDeploymentConfig(env);
     const pool = holdClient(new pg.Pool({ connectionString: cfg.postgres }));
-    const segments = segmentPipeline(cfg.stomp, cfg.postgres, pool, cfg.pipeline);
-    const decisions = decisionPipeline(cfg.stomp, pool, cfg.pipeline);
-    const alerts = alertPipeline(cfg.stomp, pool, cfg.pipeline);
     const metricsEnabled = cfg.sinkDbProfile === 'edge';
     const dataAccess = stateDataFromPool(pool, { metricsEnabled });
     return {
@@ -97,9 +100,7 @@ export default function supervisorSink(env = process.env) {
                 await adminPool.end();
             }
             if (cfg.pipelines) {
-                await segments.start();
-                decisions.start();
-                alerts.start();
+                await startPipelines(cfg, pool);
             }
             if (httpServer) {
                 httpServer.start();

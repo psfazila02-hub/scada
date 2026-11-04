@@ -1,3 +1,4 @@
+import stompOptions from './stompOptions.js';
 import { stompSource } from '@yarkivaev/source-to-sink';
 import alertCodec from '../codecs/alertCodec.js';
 import alertSink from '../sinks/alertSink.js';
@@ -29,8 +30,7 @@ export default function alertPipeline(stomp, pool, config) {
     const sink = alertSink(pool);
     const codec = alertCodec(sink, config.translations || {});
     const source = stompSource(stomp, '/exchange/scada.alerts', codec,
-        { login: config.login, passcode: config.passcode, host: config.host,
-            prefetch: config.prefetch, maxMessageBytes: config.maxMessageBytes, maxPendingBytes: config.maxPendingBytes, budget: config.budget });
+        stompOptions(config));
     return {
         /**
          * Starts the pipeline.

@@ -1,3 +1,4 @@
+import stompOptions from './stompOptions.js';
 import {
     postgresSink,
     stompSource
@@ -64,17 +65,7 @@ export default function segmentPipeline(stomp, postgres, pool, config) {
         interval: config.interval
     });
     const destination = config.segmentsDestination || segmentsIngestDestination;
-    const source = stompSource(stomp, destination, coalesce, {
-        login: config.login,
-        passcode: config.passcode,
-        host: config.host,
-        serial: false,
-        manualAck: true,
-        maxMessageBytes: config.maxMessageBytes,
-        maxPendingBytes: config.maxPendingBytes,
-        budget: config.budget,
-        prefetch: config.prefetch
-    });
+    const source = stompSource(stomp, destination, coalesce, stompOptions(config, { serial: false, manualAck: true }));
     const silence = silentOpenWatch(closeSilentOpen(pool), budget, {
         intervalMs: (config.poll || 5) * 1000
     });
