@@ -1,3 +1,4 @@
+import historyTelemetry from '../infrastructure/ingest/telemetry/historyTelemetry.js';
 import segmentPipeline, {
     segmentsIngestDestination
 } from '../infrastructure/ingest/pipelines/segmentPipeline.js';
@@ -78,7 +79,9 @@ export default function supervisorSink(env = process.env) {
     const pool = holdClient(new pg.Pool({ connectionString: cfg.postgres }));
     const metricsEnabled = cfg.sinkDbProfile === 'edge';
     const dataAccess = stateDataFromPool(pool, { metricsEnabled, historyRetentionDays: Number(env.HISTORY_RETENTION_DAYS ?? 30) });
+    const localTelemetry = historyTelemetry(env, pool);
     return {
+        historyTelemetry: localTelemetry,
         apiPort: cfg.apiPort,
         apiToken: cfg.apiToken,
         sinkDbProfile: cfg.sinkDbProfile,
@@ -99,6 +102,7 @@ export default function supervisorSink(env = process.env) {
             } finally {
                 await adminPool.end();
             }
+            await localTelemetry?.start();
             if (cfg.pipelines) {
                 await startPipelines(cfg, pool);
             }
