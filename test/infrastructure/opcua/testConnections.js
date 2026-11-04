@@ -21,7 +21,7 @@ async function port() {
     return number;
 }
 async function source(number, value) {
-    const server = new OPCUAServer({ port: number, resourcePath: '/test', nodeset_filename: [], alternateHostname: ['localhost'] });
+    const server = new OPCUAServer({ port: number, resourcePath: '/test', alternateHostname: ['localhost'] });
     await server.initialize();
     const namespace = server.engine.addressSpace.getOwnNamespace();
     const node = namespace.addVariable({ organizedBy: server.engine.addressSpace.rootFolder.objects,
