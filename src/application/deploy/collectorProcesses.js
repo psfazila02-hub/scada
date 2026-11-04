@@ -23,7 +23,7 @@ function grouped(machines, describe) {
 
 /**
  * describe(row) returns a process descriptor with a name, command and optional
- * env and resources. All sources describing the same process must agree.
+ * env, resources and image. All sources describing the same process must agree.
  * project(descriptor, rows) supplies adapter-specific env and optional hostDevices.
  * A physical device may appear in many source rows but belongs to only one process.
  */
@@ -37,6 +37,7 @@ export default function collectorProcesses(machines, describe, project) {
             devices.add(device);
         });
         return { name: descriptor.name, command: descriptor.command, env: { ...descriptor.env, ...settings.env },
-            hostDevices, resources: descriptor.resources };
+            hostDevices, resources: descriptor.resources,
+            ...(descriptor.image === undefined ? {} : { image: descriptor.image }) };
     });
 }

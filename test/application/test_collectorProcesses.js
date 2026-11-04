@@ -40,4 +40,13 @@ describe('collectorProcesses', () => {
         const shared = sources.map((row) => { return { ...row, from: 'bus1' }; });
         assert.throws(() => { collectorProcesses(shared, describeSource, project); }, /shared between processes/u);
     });
+
+    it('preserves an optional image override only on the process that declares it', () => {
+        const processes = collectorProcesses(sources, (row) => {
+            const descriptor = describeSource(row);
+            return descriptor.name === 'thermals' ? { ...descriptor, image: 'registry/collector:next' } : descriptor;
+        }, project);
+        assert.equal(processes[1].image, 'registry/collector:next');
+        assert(!Object.hasOwn(processes[0], 'image'));
+    });
 });
