@@ -65,3 +65,29 @@ describe('collector manifest reader', () => {
         } finally { await collector.stop(); }
     });
 });
+
+describe('collector startup signals', () => {
+    const signals = ['SIGTERM', 'SIGINT', 'SIGHUP'];
+    function counts() { return signals.map((signal) => { return process.listenerCount(signal); }); }
+    it('owns signal handlers while the initial manifest is still pending', async () => {
+        const before = counts();
+        let release;
+        const pending = new Promise((resolve) => { release = resolve; });
+        const startup = runCollector({ registry: registry([]), env: {}, argv: [],
+            manifestReader() { return pending; } });
+        try {
+            assert.deepEqual(counts(), before.map((count) => { return count + 1; }));
+        } finally {
+            release({ assignments: [] });
+            const collector = await startup;
+            await collector.stop();
+        }
+        assert.deepEqual(counts(), before);
+    });
+    it('detaches startup handlers when the initial manifest fails', async () => {
+        const before = counts();
+        await assert.rejects(runCollector({ registry: registry([]), env: {}, argv: [],
+            manifestReader() { throw new Error('manifest unavailable'); } }), /manifest unavailable/u);
+        assert.deepEqual(counts(), before);
+    });
+});

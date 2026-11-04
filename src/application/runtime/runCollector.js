@@ -38,6 +38,7 @@ export default async function runCollector({ registry, env = process.env, argv =
             try { await runtime.stop(); } finally { await Promise.all([owned.close(), state.health?.stop()]); }
         }
     };
+    if (signals) { state.detach = collectorSignals(collector); }
     try {
         await collector.reload();
         if (env.COLLECTOR_HEALTH_PORT) { state.health = await runtimeHealth(runtime, { port: Number(env.COLLECTOR_HEALTH_PORT), host: env.COLLECTOR_HEALTH_HOST ?? '127.0.0.1' }); }
@@ -45,6 +46,5 @@ export default async function runCollector({ registry, env = process.env, argv =
         try { await collector.stop(); } catch (cleanup) { throw new AggregateError([error, cleanup], 'Collector startup cleanup failed'); }
         throw error;
     }
-    if (signals) { state.detach = collectorSignals(collector); }
     return collector;
 }
