@@ -17,7 +17,7 @@ async function apply(runtime, document) {
     }
 }
 /** Local executable host. The external agent can instead use createRuntime directly. */
-export default async function runCollector({ registry, env = process.env, argv = process.argv.slice(2), signals = true, ...services }) {
+export default async function runCollector({ registry, env = process.env, argv = process.argv.slice(2), signals = true, manifestReader = readManifest, ...services }) {
     const owned = runtimeServices(env, services);
     const runtime = createRuntime({ registry, ...owned });
     const state = { health: null, reloading: false, stopped: false, detach: null };
@@ -27,7 +27,7 @@ export default async function runCollector({ registry, env = process.env, argv =
             if (state.stopped || state.reloading) { throw new Error('Collector stopped or reload in progress'); }
             state.reloading = true;
             try {
-                const document = await readManifest(env, argv);
+                const document = await manifestReader(env, argv);
                 await validateManifest(document, registry);
                 await apply(runtime, document);
             } finally { Object.assign(state, { reloading: false }); }
