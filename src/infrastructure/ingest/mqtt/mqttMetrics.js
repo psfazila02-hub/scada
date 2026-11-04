@@ -1,18 +1,13 @@
-import {
-    batch,
-    circuit,
-    clock,
-    mqttSource,
-    timedBatch
-} from '@yarkivaev/source-to-sink';
+import { mqttSource } from '@yarkivaev/source-to-sink';
+import ingestBatch from '../ingestBatch.js';
 import metricsCodec from './metricsTransformer.js';
 
 /**
  * Pipeline for streaming MQTT sensor data to a storage sink.
  *
  * Subscribes to MQTT topic and batches messages before writing
- * to the provided sink. Uses circuit breaker for failure isolation
- * and time-based flushing for low-volume periods.
+ * to the provided sink. Bounds queued records and bytes, with a
+ * durable-write deadline and time-based flushing for low-volume periods.
  *
  * @example
  *   import { clickhouseSink } from '@yarkivaev/source-to-sink';
@@ -33,8 +28,8 @@ import metricsCodec from './metricsTransformer.js';
  * @param {object} config - Pipeline configuration
  * @param {number} config.size - Batch size before flush
  * @param {number} config.interval - Seconds before time-based flush
- * @param {number} config.threshold - Circuit breaker failure threshold
- * @param {number} config.timeout - Circuit breaker timeout in seconds
+ * @param {number} config.threshold - Legacy option (retained for configuration compatibility)
+ * @param {number} config.timeout - Legacy option (use writeTimeoutMs for write deadlines)
  * @param {string} [config.clientId] - MQTT client ID for persistent sessions
  * @param {number} [config.sessionExpiryInterval] - Session expiry in seconds (default 3600)
  * @returns {object} Pipeline with start() and stop() methods
@@ -52,9 +47,7 @@ export default function mqttMetrics(mqtt, sink, topic, config) {
     if (!config || typeof config !== 'object') {
         throw new Error('Config must be an object');
     }
-    const clk = clock();
-    const breaker = circuit(config.threshold, config.timeout, clk);
-    const collector = timedBatch(batch(sink, config.size, breaker), config.interval);
+    const collector = ingestBatch(sink, config);
     const transformer = metricsCodec(collector);
     const source = mqttSource(mqtt, topic, transformer, {
         clientId: config.clientId,
@@ -65,14 +58,14 @@ export default function mqttMetrics(mqtt, sink, topic, config) {
          * Starts the pipeline.
          */
         start() {
-            source.start();
+            return source.start();
         },
         /**
          * Stops the pipeline.
          */
-        stop() {
-            source.stop();
-            collector.stop();
+        async stop() {
+            await source.stop();
+            await collector.stop();
         }
     };
 }

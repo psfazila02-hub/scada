@@ -70,15 +70,15 @@ export default function registerPublish(plans, origin, collector) {
          * @param {Array<number>} registers - uint16 window
          */
         accept(registers) {
-            rows.forEach((item) => {
-                collector.accept({
+            return Promise.all(rows.map((item) => {
+                return collector.accept({
                     payload: JSON.stringify({
                         ts: Date.now(),
                         value: decodePoint(item.point, origin, registers)
                     }),
                     topic: item.topic
                 });
-            });
+            }));
         }
     };
 }

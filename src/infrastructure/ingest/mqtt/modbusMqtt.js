@@ -1,12 +1,11 @@
 import {
-    batch,
-    circuit,
     clock,
     modbusRtuBusSource,
     modbusRtuSource,
     modbusSource,
     mqttSink
 } from '@yarkivaev/source-to-sink';
+import ingestBatch from '../ingestBatch.js';
 import { parseModbusDeviceSpec } from './modbusDeviceSpec.js';
 
 /**
@@ -181,24 +180,28 @@ function buildSources(devices, config, collector, clk) {
 export default function modbusMqtt(mqtt, devices, config) {
     assertModbusMqttArgs(mqtt, devices, config);
     const clk = clock();
-    const breaker = circuit(config.threshold, config.timeout, clk);
     const sink = mqttSink(mqtt, {
         clientId: config.clientId || 'scada-modbus',
         qos: 1
     });
-    const collector = batch(sink, 5, breaker);
+    const collector = ingestBatch(sink, { ...config, size: config.size ?? 5 });
     const sources = buildSources(devices, config, collector, clk);
     return {
-        start() {
-            sink.start();
-            for (const source of sources) {
-                source.start();
+        async start() {
+            await sink.start();
+            try {
+                await Promise.all(sources.map((source) => { return source.start(); }));
+            } catch (error) {
+                await Promise.allSettled(sources.map((source) => { return source.stop(); }));
+                await sink.stop();
+                throw error;
             }
         },
-        stop() {
-            for (const source of sources) {
-                source.stop();
-            }
+        async stop() {
+            try {
+                await Promise.all(sources.map((source) => { return source.stop(); }));
+                await collector.stop();
+            } finally { await sink.stop(); }
         }
     };
 }

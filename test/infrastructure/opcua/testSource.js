@@ -48,6 +48,7 @@ describe('OPC UA connections', function () {
         assert.throws(() => { connections([entry, entry], () => {}); }, /duplicate/iu);
         assert.throws(() => { connections([{ ...entry, channels: [...entry.channels, ...entry.channels] }], () => {}); }, /duplicate/iu);
         assert.throws(() => { connections([{ ...entry, heartbeatMs: 0 }], () => {}); });
+        assert.throws(() => { connections([entry], () => {}, { maxPending: 1.5 }); }, /integer/u);
     });
     it('isolates two endpoints, reads fresh heartbeats, recovers outage and stops cleanly', async function () {
         const firstPort = await port();
@@ -191,6 +192,27 @@ describe('OPC UA connections', function () {
             await stopping;
         } finally {
             release();
+            await runtime.stop();
+            await available.server.shutdown(0);
+        }
+    });
+    it('bounds stop despite a hung collector and signals cancellation', async function () {
+        const number = await port();
+        const available = await source(number, 42);
+        const signals = [];
+        const runtime = opcuaSource([config(number, 'a')], { accept(record, context) {
+            signals.push(context.signal);
+            return new Promise(() => {});
+        } }, { deliveryTimeoutMs: 150, maxPending: 1, maxPendingBytes: 1024 });
+        try {
+            await runtime.start();
+            await until(() => { return signals.length > 0; });
+            const started = Date.now();
+            await runtime.stop();
+            assert.ok(Date.now() - started < 1000);
+            assert.equal(signals[0].aborted, true);
+            assert.equal(available.server.engine.currentSubscriptionCount, 0);
+        } finally {
             await runtime.stop();
             await available.server.shutdown(0);
         }

@@ -11,11 +11,15 @@ import deliverToMqttRecord from './deliverToMqttRecord.js';
 export function relayConsumer(sink, channel) {
     return (msg) => {
         if (!msg) {
-            return;
+            return undefined;
         }
         const record = deliverToMqttRecord(msg.fields, msg.content);
-        sink.write([record]);
+        const written = sink.write([record]);
+        if (written && typeof written.then === 'function') {
+            return written.then(() => { channel.ack(msg); });
+        }
         channel.ack(msg);
+        return undefined;
     };
 }
 
@@ -43,10 +47,10 @@ export default function amqpMqttRelay(amqpUrl, queue, sink, options = {}) {
         }
     }, { ...options, prefetch });
     return {
-        start() {
+        async start() {
             if (!opened) {
+                await sink.start();
                 opened = true;
-                sink.start();
             }
             return session.start();
         },

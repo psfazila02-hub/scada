@@ -30,25 +30,24 @@ export default function metricsCodec(collector, log = console) {
                 parsed = JSON.parse(raw.payload);
             } catch {
                 log.warn(`Cannot resolve payload on ${raw.topic}: not valid JSON`);
-                return;
+                return undefined;
             }
             if (typeof parsed === 'number') {
-                collector.accept({
+                return collector.accept({
                     topic: raw.topic,
                     ts: Date.now(),
                     value: parsed
                 });
-                return;
             }
             if (typeof parsed === 'object' && parsed !== null && typeof parsed.value === 'number') {
-                collector.accept({
+                return collector.accept({
                     topic: raw.topic,
                     ts: parsed.ts || Date.now(),
                     value: parsed.value
                 });
-                return;
             }
             log.warn(`Cannot resolve payload on ${raw.topic}: no numeric value found`);
+            return undefined;
         }
     };
 }

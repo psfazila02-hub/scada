@@ -22,24 +22,25 @@ export default function activityCodec(collector) {
          * @param {object} entry - Log entry with ts and line
          */
         accept(entry) {
+            let log;
             try {
-                const log = JSON.parse(entry.line);
-                if (!log.StartUTC || !log.RequestMethod || !log.RequestPath) {
-                    return;
-                }
-                collector.accept({
-                    ts: new Date(log.StartUTC).getTime(),
-                    user: log['request_Remote-User'] || '',
-                    email: log['request_Remote-Email'] || '',
-                    method: log.RequestMethod || '',
-                    path: log.RequestPath || '',
-                    status: parseInt(log.DownstreamStatus, 10) || 0,
-                    duration: parseFloat(log.Duration) / 1e9 || 0,
-                    ip: log.ClientHost || ''
-                });
+                log = JSON.parse(entry.line);
             } catch {
-                // Skip malformed log entries
+                return undefined;
             }
+            if (!log || !log.StartUTC || !log.RequestMethod || !log.RequestPath) {
+                return undefined;
+            }
+            return collector.accept({
+                ts: new Date(log.StartUTC).getTime(),
+                user: log['request_Remote-User'] || '',
+                email: log['request_Remote-Email'] || '',
+                method: log.RequestMethod || '',
+                path: log.RequestPath || '',
+                status: parseInt(log.DownstreamStatus, 10) || 0,
+                duration: parseFloat(log.Duration) / 1e9 || 0,
+                ip: log.ClientHost || ''
+            });
         }
     };
 }

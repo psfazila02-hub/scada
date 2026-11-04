@@ -34,13 +34,13 @@ export function mx210Metrics(device, collector) {
     return {
         accept(registers) {
             const ts = Date.now();
-            for (const entry of layout) {
-                collector.accept({
+            return Promise.all(layout.map((entry) => {
+                return collector.accept({
                     topic: `MX210/${device}/GET/${entry.channel}/VALUE`,
                     ts,
                     value: decode(registers[entry.offset], registers[entry.offset + 1])
                 });
-            }
+            }));
         }
     };
 }
