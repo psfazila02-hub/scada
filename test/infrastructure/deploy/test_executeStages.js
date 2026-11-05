@@ -15,6 +15,30 @@ function runner(calls, pods = '') {
     };
 }
 describe('executeStages', () => {
+    it('validates legacy adoption before writes and checks SSA only after that stage hands off its fields', () => {
+        const calls = []; const adopted = new Set(); const run = runner(calls);
+        function ownership(command, args, options) {
+            const result = run(command, args);
+            if (args.includes('apply')) {
+                if (args.includes('--server-side') && !adopted.has(options.input)) { throw new Error('legacy ownership conflict'); }
+                if (!args.includes('--server-side') && !args.includes('--dry-run=server')) { adopted.add(options.input); }
+            }
+            assert(!args.includes('--force-conflicts'));
+            return result;
+        }
+        assert.doesNotThrow(() => {return executeStages(stages(), 'adopt', ownership)});
+        const firstWrite = calls.findIndex((call) => {return call.includes(' apply ') && !call.includes('dry-run')});
+        assert.equal(calls.slice(0, firstWrite).filter((call) => {return call.includes('--dry-run=server')}).length, 3);
+        assert.deepEqual([...adopted], ['api', 'collector']);
+    });
+    it('does not write any stage if a later legacy-adoption validation fails', () => {
+        const calls = []; const run = runner(calls);
+        assert.throws(() => {return executeStages(stages(), 'adopt', (command, args, options) => {
+            if (options?.input === 'collector' && args.includes('--dry-run=server')) { throw new Error('admission failed'); }
+            return run(command, args);
+        })}, /admission failed/u);
+        assert(!calls.some((call) => {return call.includes(' apply ') && !call.includes('dry-run')}));
+    });
     it('preflights every stage before writes and waits for the API before starting the collector', () => {
         const calls = [];
         executeStages(stages(), 'apply', runner(calls));
