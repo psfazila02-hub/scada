@@ -522,3 +522,24 @@ The application chart accepts existing PostgreSQL/RabbitMQ claims, secret-backed
 environment values, `envFrom`, config volumes, probes and extra Kubernetes objects.
 PostgreSQL honors the root `pullSecret`. Existing claims are referenced without
 creating or deleting storage; plant packages supply their precise deployment values.
+
+### Per-server module configuration
+
+A server may override its profile's `modules`. Maps merge recursively; omitted
+fields are inherited, arrays replace, and null removes an inherited key.
+`state_store.pgdata` selects PostgreSQL's existing data directory and takes
+precedence over the compatible `state_store.chart.data` setting.
+
+```yaml
+servers:
+  - id: cell-a
+    modules:
+      state_store:
+        pgdata: /var/lib/postgresql/data/pgdata
+    profile:
+      id: cell
+      variables:
+        cluster: cell-a
+```
+
+This changes the selected server only; it does not mutate the shared profile.
