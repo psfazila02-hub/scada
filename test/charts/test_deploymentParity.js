@@ -14,6 +14,13 @@ describe('deployment parity', () => {
             postgres: { existingClaim: 'old-data', data: '/data/pg', enabled: false, secret: 'credentials' }
         });
     });
+    it('routes Postgres to preserved pods whose database port has no name', () => {
+        const manifest = render({ site: { enabled: false }, postgres: { podTemplate: {
+            metadata: { labels: { app: 'postgres' } }, spec: { containers: [{ name: 'postgres', image: 'postgres:16', ports: [{ containerPort: 5432 }] }] }
+        } } });
+        assert.match(manifest, /port: 5432\n {6}targetPort: 5432/u);
+        assert(!manifest.includes('targetPort: postgres'));
+    });
     it('mounts existing Postgres data and config without creating storage', () => {
         const manifest = render({ postgres: {
             existingClaim: 'old-data', storage: '50Gi', storageClass: 'local-path', data: '/var/lib/postgresql/data/existing',

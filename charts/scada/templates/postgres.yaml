@@ -11,7 +11,7 @@ spec:
   ports:
     - name: postgres
       port: 5432
-      targetPort: postgres
+      targetPort: 5432
   selector:
     {{- include "scada.match" (dict "app" "postgres" "ctx" .) | nindent 4 }}
 ---
